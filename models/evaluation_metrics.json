@@ -1,0 +1,70 @@
+{
+  "precision": 0.42771084337349397,
+  "recall": 0.355,
+  "f1_score": 0.3879781420765027,
+  "confusion_matrix": {
+    "tn": 3455,
+    "fp": 95,
+    "fn": 129,
+    "tp": 71
+  },
+  "false_positives": 95,
+  "false_negatives": 129,
+  "decision_threshold": -0.02500000000000001,
+  "per_class_breakdown": {
+    "normal": {
+      "total": 3550,
+      "detected": 3455,
+      "missed": 95,
+      "metric": "97.3% Specificity"
+    },
+    "temperature_spike": {
+      "total": 9,
+      "detected": 8,
+      "missed": 1,
+      "metric": "88.9% Recall"
+    },
+    "pressure_spike": {
+      "total": 11,
+      "detected": 11,
+      "missed": 0,
+      "metric": "100.0% Recall"
+    },
+    "temperature_drop": {
+      "total": 9,
+      "detected": 6,
+      "missed": 3,
+      "metric": "66.7% Recall"
+    },
+    "frozen_sensor": {
+      "total": 52,
+      "detected": 1,
+      "missed": 51,
+      "metric": "1.9% Recall"
+    },
+    "missing_data": {
+      "total": 11,
+      "detected": 0,
+      "missed": 11,
+      "metric": "0.0% Recall"
+    },
+    "humidity_spike": {
+      "total": 16,
+      "detected": 12,
+      "missed": 4,
+      "metric": "75.0% Recall"
+    },
+    "sensor_drift": {
+      "total": 77,
+      "detected": 18,
+      "missed": 59,
+      "metric": "23.4% Recall"
+    },
+    "multivariate_inconsistency": {
+      "total": 15,
+      "detected": 15,
+      "missed": 0,
+      "metric": "100.0% Recall"
+    }
+  }
+}

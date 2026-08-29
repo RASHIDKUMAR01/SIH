@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-08-28T06:36:33.519521+00:00",
+  "total_records": 25000,
+  "splits": {
+    "full": {
+      "name": "full",
+      "row_count": 25000,
+      "missing_values": {
+        "temperature": 37,
+        "pressure": 27,
+        "humidity": 29
+      },
+      "anomaly_distribution": {
+        "normal_count": 23773,
+        "anomaly_count": 1227,
+        "anomaly_percentage": 4.91
+      },
+      "class_distribution": {
+        "normal": 23773,
+        "sensor_drift": 412,
+        "frozen_sensor": 287,
+        "multivariate_inconsistency": 126,
+        "pressure_spike": 100,
+        "humidity_spike": 95,
+        "missing_data": 79,
+        "temperature_spike": 65,
+        "temperature_drop": 63
+      }
+    },
+    "train": {
+      "name": "train",
+      "row_count": 17500,
+      "missing_values": {
+        "temperature": 31,
+        "pressure": 24,
+        "humidity": 18
+      },
+      "anomaly_distribution": {
+        "normal_count": 16668,
+        "anomaly_count": 832,
+        "anomaly_percentage": 4.75
+      },
+      "class_distribution": {
+        "normal": 16668,
+        "sensor_drift": 266,
+        "frozen_sensor": 185,
+        "multivariate_inconsistency": 95,
+        "pressure_spike": 74,
+        "humidity_spike": 63,
+        "missing_data": 59,
+        "temperature_spike": 47,
+        "temperature_drop": 43
+      }
+    },
+    "val": {
+      "name": "val",
+      "row_count": 3750,
+      "missing_values": {
+        "temperature": 0,
+        "pressure": 3,
+        "humidity": 6
+      },
+      "anomaly_distribution": {
+        "normal_count": 3555,
+        "anomaly_count": 195,
+        "anomaly_percentage": 5.2
+      },
+      "class_distribution": {
+        "normal": 3555,
+        "sensor_drift": 69,
+        "frozen_sensor": 50,
+        "multivariate_inconsistency": 16,
+        "humidity_spike": 16,
+        "pressure_spike": 15,
+        "temperature_drop": 11,
+        "missing_data": 9,
+        "temperature_spike": 9
+      }
+    },
+    "test": {
+      "name": "test",
+      "row_count": 3750,
+      "missing_values": {
+        "temperature": 6,
+        "pressure": 0,
+        "humidity": 5
+      },
+      "anomaly_distribution": {
+        "normal_count": 3550,
+        "anomaly_count": 200,
+        "anomaly_percentage": 5.33
+      },
+      "class_distribution": {
+        "normal": 3550,
+        "sensor_drift": 77,
+        "frozen_sensor": 52,
+        "humidity_spike": 16,
+        "multivariate_inconsistency": 15,
+        "pressure_spike": 11,
+        "missing_data": 11,
+        "temperature_spike": 9,
+        "temperature_drop": 9
+      }
+    }
+  },
+  "file_paths": {
+    "full": "C:\\Users\\ssras\\.gemini\\antigravity\\scratch\\sih-aws-anomaly-detection\\data\\aws_dataset_full.csv",
+    "train": "C:\\Users\\ssras\\.gemini\\antigravity\\scratch\\sih-aws-anomaly-detection\\data\\train.csv",
+    "val": "C:\\Users\\ssras\\.gemini\\antigravity\\scratch\\sih-aws-anomaly-detection\\data\\val.csv",
+    "test": "C:\\Users\\ssras\\.gemini\\antigravity\\scratch\\sih-aws-anomaly-detection\\data\\test.csv"
+  }
+}
