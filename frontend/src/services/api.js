@@ -1,8 +1,19 @@
 /**
  * Frontend API & Real-Time WebSocket Service for SkyGuard AI.
  */
-const API_BASE = "http://127.0.0.1:8000/api";
-const WS_BASE = "ws://127.0.0.1:8000/api/ws/telemetry";
+const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+
+function getWsBase() {
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+      return "ws://127.0.0.1:8000/api/ws/telemetry";
+    }
+    return `${proto}//${window.location.host}/api/ws/telemetry`;
+  }
+  return "ws://127.0.0.1:8000/api/ws/telemetry";
+}
+
 
 export async function fetchHealth() {
   const res = await fetch(`${API_BASE}/health`);
@@ -117,7 +128,8 @@ export function connectTelemetryWebSocket(onTelemetry, onOpen, onError, onClose)
 
   function connect() {
     try {
-      socket = new WebSocket(WS_BASE);
+      socket = new WebSocket(getWsBase());
+
 
       socket.onopen = () => {
         if (onOpen) onOpen();

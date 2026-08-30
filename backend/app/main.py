@@ -1,6 +1,14 @@
-﻿"""
+"""
 Main FastAPI Application Entrypoint for SIH 26073 AWS Anomaly Detection.
 """
+import os
+import sys
+
+# Ensure backend directory is in sys.path for local, Docker, and Vercel serverless execution
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +17,7 @@ from fastapi.responses import RedirectResponse
 from app.database.session import init_db
 from app.api.routes import router as api_router
 from app.services.streaming_worker import simulator_worker
+
 
 
 @asynccontextmanager
