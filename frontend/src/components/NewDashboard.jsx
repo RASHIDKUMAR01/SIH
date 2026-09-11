@@ -426,6 +426,47 @@ export default function NewDashboard({ onNavigateToLegacy }) {
           })}
         </nav>
 
+        {/* Active ML Model Card */}
+        <div style={{
+          background: "rgba(15, 23, 42, 0.7)",
+          border: "1px solid rgba(51, 65, 85, 0.6)",
+          borderRadius: "8px",
+          padding: "10px 12px",
+          margin: "0 10px 8px 10px",
+          fontSize: "11px",
+          fontFamily: "var(--font-mono, monospace)",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#94a3b8", fontWeight: "700" }}>
+              <BrainCircuit size={13} color="#38bdf8" />
+              <span>ACTIVE ML MODEL</span>
+            </div>
+            <span style={{
+              background: "rgba(56, 189, 248, 0.2)",
+              color: "#38bdf8",
+              border: "1px solid rgba(56, 189, 248, 0.4)",
+              borderRadius: "4px",
+              padding: "1px 6px",
+              fontSize: "10px",
+              fontWeight: "700",
+            }}>
+              LSTM
+            </span>
+          </div>
+          <div style={{ fontWeight: "700", color: "#f8fafc", fontSize: "11px", marginBottom: "2px" }}>
+            Recurrent Neural Network
+          </div>
+          <div style={{ color: "#94a3b8", fontSize: "10px" }}>Role: Temporal Anomaly Detection</div>
+          <div style={{ color: "#94a3b8", fontSize: "10px" }}>Window: 15 samples (15 min)</div>
+          <div style={{ color: "#94a3b8", fontSize: "10px" }}>Threshold: 0.28959</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "6px", borderTop: "1px solid rgba(51, 65, 85, 0.4)", paddingTop: "4px" }}>
+            <span style={{ color: "#cbd5e1", fontSize: "10px" }}>Production Baseline: Model A</span>
+            <span style={{ background: "rgba(16, 185, 129, 0.2)", color: "#34d399", padding: "1px 4px", borderRadius: "3px", fontSize: "9px", fontWeight: "700" }}>
+              ACTIVE
+            </span>
+          </div>
+        </div>
+
         {/* Sidebar Footer: Quick Controls & Switch to Legacy */}
         <div style={{
           padding: "14px 16px",
@@ -718,19 +759,51 @@ export default function NewDashboard({ onNavigateToLegacy }) {
           {/* Module-Level Footer */}
           <footer style={{
             textAlign: "center",
-            padding: "28px 0 16px 0",
+            padding: "20px 0 12px 0",
             color: "#64748b",
             fontSize: "12px",
             borderTop: "1px solid rgba(51, 65, 85, 0.4)",
-            marginTop: "36px",
+            marginTop: "24px",
           }}>
             <div>Smart India Hackathon (SIH 26073) | Automatic Weather Station Intelligent AI/ML Anomaly Detection System</div>
             <div style={{ marginTop: "4px", color: "#475569" }}>
-              Dual Model Pipeline: Isolation Forest (150 Trees) + Vectorized LSTM Sequence Autoencoder + SHAP Analysis | Hardware Node: AWS-TINKER-01
+              Dual Model Pipeline: Isolation Forest (150 Trees) + Vectorized LSTM Sequence Autoencoder + SHAP Analysis | Hardware Node: AWS-001 (AWS)
             </div>
           </footer>
 
         </main>
+
+        {/* Bottom Cockpit Status Bar */}
+        <div style={{
+          background: "#080c14",
+          borderTop: "1px solid rgba(51, 65, 85, 0.6)",
+          padding: "7px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "11px",
+          fontFamily: "var(--font-mono, monospace)",
+          color: "#94a3b8",
+          flexWrap: "wrap",
+          gap: "12px",
+          position: "sticky",
+          bottom: 0,
+          zIndex: 30,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ color: "#38bdf8", fontWeight: "700" }}>⚡ AWS NODE: <strong>AWS-001</strong></span>
+            <span style={{ color: "#475569" }}>|</span>
+            <span style={{ color: "#fbbf24", fontWeight: "700" }}>
+              STATUS: <strong>PHYSICAL HW DISCONNECTED (SIMULATION STREAM ACTIVE)</strong>
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <span>📊 PERSISTED: <strong style={{ color: "#f8fafc" }}>{statistics?.total_readings ?? history.length}</strong></span>
+            <span style={{ color: "#475569" }}>|</span>
+            <span>⚡ SYNC: <strong style={{ color: "#34d399" }}>{new Date().toLocaleTimeString()}</strong></span>
+          </div>
+        </div>
       </div>
 
     </div>

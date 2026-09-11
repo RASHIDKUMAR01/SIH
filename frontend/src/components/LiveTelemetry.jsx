@@ -1,241 +1,502 @@
-import React from "react";
+import React, { useState } from "react";
 import {
-  Thermometer,
-  Droplets,
-  Gauge,
-  Wind,
-  CloudRain,
-  BatteryCharging,
-  Radio,
-  Clock,
   Activity,
-  ArrowUpRight,
-  ArrowDownRight
+  RotateCcw,
+  Thermometer,
+  Gauge,
+  Droplets,
+  Wind,
 } from "lucide-react";
-import TelemetryCharts from "./TelemetryCharts";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from "recharts";
 
 export default function LiveTelemetry({ currentTelemetry, history }) {
-  const temp = currentTelemetry?.temperature ?? 24.78;
-  const hum = currentTelemetry?.humidity ?? 60.0;
-  const press = currentTelemetry?.pressure ?? 1013.25;
-  const wind = currentTelemetry?.wind_speed ?? 14.5;
-  const rain = currentTelemetry?.rainfall ?? 0.0;
-  const battery = currentTelemetry?.battery_voltage ?? 4.12;
-  const stationId = currentTelemetry?.station_id || "AWS-TINKER-01";
-  const timestamp = currentTelemetry?.timestamp || new Date().toISOString();
-  const timestampMs = currentTelemetry?.timestamp_ms || Date.now() % 100000000;
-  const isAnomaly = currentTelemetry?.is_anomaly || false;
+  const [bufferScope, setBufferScope] = useState(30); // 15, 30, 60, 100 pts
+  const [clearedOffset, setClearedOffset] = useState(0);
 
-  const cards = [
-    {
-      title: "Ambient Temperature",
-      value: temp.toFixed(2),
-      unit: "°C",
-      icon: Thermometer,
-      color: "#f87171",
-      bg: "rgba(239, 68, 68, 0.1)",
-      border: "rgba(239, 68, 68, 0.3)",
-      nominal: "Nominal Range: -10°C to 50°C",
-      status: temp < -10 || temp > 50 ? "ANOMALY" : "HEALTHY",
-    },
-    {
-      title: "Relative Humidity",
-      value: hum.toFixed(2),
-      unit: "%",
-      icon: Droplets,
-      color: "#38bdf8",
-      bg: "rgba(56, 189, 248, 0.1)",
-      border: "rgba(56, 189, 248, 0.3)",
-      nominal: "Nominal Range: 10% to 95%",
-      status: hum < 5 || hum > 99 ? "ANOMALY" : "HEALTHY",
-    },
-    {
-      title: "Atmospheric Pressure",
-      value: press.toFixed(2),
-      unit: "hPa",
-      icon: Gauge,
-      color: "#a855f7",
-      bg: "rgba(168, 85, 247, 0.1)",
-      border: "rgba(168, 85, 247, 0.3)",
-      nominal: "Nominal Range: 950 to 1050 hPa",
-      status: press < 900 || press > 1080 ? "ANOMALY" : "HEALTHY",
-    },
-    {
-      title: "Surface Wind Speed",
-      value: wind.toFixed(2),
-      unit: "m/s",
-      icon: Wind,
-      color: "#10b981",
-      bg: "rgba(16, 185, 129, 0.1)",
-      border: "rgba(16, 185, 129, 0.3)",
-      nominal: "Nominal Range: 0 to 45 m/s",
-      status: wind > 40 ? "WARNING" : "HEALTHY",
-    },
-    {
-      title: "Precipitation / Rainfall",
-      value: rain.toFixed(2),
-      unit: "mm",
-      icon: CloudRain,
-      color: "#0284c7",
-      bg: "rgba(2, 132, 199, 0.1)",
-      border: "rgba(2, 132, 199, 0.3)",
-      nominal: "Pluviometer Rate (Tipping Bucket)",
-      status: rain > 50 ? "WARNING" : "HEALTHY",
-    },
-    {
-      title: "LiPo Battery Voltage",
-      value: battery.toFixed(2),
-      unit: "V",
-      icon: BatteryCharging,
-      color: "#fbbf24",
-      bg: "rgba(245, 158, 11, 0.1)",
-      border: "rgba(245, 158, 11, 0.3)",
-      nominal: "Solar Buffer: 3.6V to 4.2V",
-      status: battery < 3.4 ? "LOW" : "HEALTHY",
-    },
-  ];
+  const temp = currentTelemetry?.temperature ?? 24.50;
+  const press = currentTelemetry?.pressure ?? 1012.00;
+  const hum = currentTelemetry?.humidity ?? 60.00;
+  const wind = currentTelemetry?.wind_speed ?? 4.00;
+
+  // Slice history according to selected bufferScope
+  const rawData = (history || []).slice(clearedOffset);
+  const slicedData = rawData.slice(-bufferScope);
+
+  // If buffer is still filling up, format data with exact sample indices #0, #1, #2...
+  const chartData = slicedData.map((d, idx) => ({
+    ...d,
+    sampleIdx: idx,
+    indexLabel: `#${idx}`,
+    temp_val: d.temperature != null ? Number(d.temperature.toFixed(2)) : null,
+    press_val: d.pressure != null ? Number(d.pressure.toFixed(2)) : null,
+    hum_val: d.humidity != null ? Number(d.humidity.toFixed(2)) : null,
+    wind_val: d.wind_speed != null ? Number(d.wind_speed.toFixed(2)) : (d.wind != null ? Number(d.wind.toFixed(2)) : 4.0),
+    is_anomaly: Boolean(d.is_anomaly),
+    anomaly_type: d.anomaly_type || "NORMAL",
+  }));
+
+  // Handle reset/clear buffer
+  const handleResetBuffer = () => {
+    if (history && history.length > 0) {
+      setClearedOffset(history.length);
+    }
+  };
+
+  // Oscilloscope Custom Tooltip with crosshair dot and caret indicator
+  const createOscilloscopeTooltip = (channelName, unit, color) => {
+    return ({ active, payload }) => {
+      if (active && payload && payload.length) {
+        const point = payload[0].payload;
+        const val = payload[0].value;
+        return (
+          <div style={{
+            background: "rgba(10, 14, 23, 0.95)",
+            border: `1px solid ${color}`,
+            borderRadius: "6px",
+            padding: "6px 12px",
+            boxShadow: `0 0 15px rgba(0, 0, 0, 0.8), 0 0 8px ${color}40`,
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: "11px",
+            color: "#f8fafc",
+            pointerEvents: "none",
+          }}>
+            <div style={{ color: "#94a3b8", fontWeight: "700", marginBottom: "2px" }}>
+              #{point.sampleIdx}
+            </div>
+            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+              <span style={{ color: color, textTransform: "lowercase" }}>{channelName} :</span>
+              <strong style={{ color: "#f8fafc" }}>
+                {typeof val === "number" ? val.toFixed(2) : val} {unit}
+              </strong>
+            </div>
+            {point.is_anomaly && (
+              <div style={{
+                color: "#f87171",
+                fontWeight: "700",
+                fontSize: "10px",
+                marginTop: "4px",
+                borderTop: "1px solid rgba(239, 68, 68, 0.3)",
+                paddingTop: "2px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}>
+                ▲ ANOMALY: {point.anomaly_type}
+              </div>
+            )}
+          </div>
+        );
+      }
+      return null;
+    };
+  };
+
+  // Customized dot rendering with caret marker for anomalies
+  const renderAnomalyDot = (color) => {
+    return (props) => {
+      const { cx, cy, payload } = props;
+      if (payload.is_anomaly) {
+        return (
+          <g key={`dot-${payload.sampleIdx}-${payload.timestamp}`}>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={5}
+              fill="#ffffff"
+              stroke="#ef4444"
+              strokeWidth={2.5}
+            />
+            {/* Red caret marker above anomaly peaks */}
+            <text
+              x={cx}
+              y={cy - 10}
+              textAnchor="middle"
+              fill="#ef4444"
+              fontSize="12"
+              fontWeight="bold"
+              fontFamily="sans-serif"
+            >
+              ▲
+            </text>
+          </g>
+        );
+      }
+      return null;
+    };
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
       
-      {/* Telemetry Header Bar with Station ID and Time Metadata */}
-      <div className="glass-panel" style={{ padding: "18px 24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-            <div style={{
-              width: "44px",
-              height: "44px",
-              borderRadius: "12px",
-              background: "linear-gradient(135deg, #0284c7 0%, #10b981 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 0 20px rgba(2, 132, 199, 0.4)",
-            }}>
-              <Activity size={24} color="#ffffff" />
-            </div>
-            <div>
-              <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#f8fafc", margin: 0 }}>
-                Live AWS Meteorological Telemetry
-              </h2>
-              <p style={{ fontSize: "13px", color: "#94a3b8", margin: "3px 0 0 0" }}>
-                Continuous 1.0 Hz Sensor Channels with Rolling Baseline Envelopes
-              </p>
-            </div>
-          </div>
+      {/* 1. TOP HEADER & BUFFER SCOPE CONTROLS */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        padding: "4px 2px",
+      }}>
+        {/* Title */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <Activity size={18} color="#38bdf8" />
+          <h2 style={{
+            fontSize: "13px",
+            fontWeight: "800",
+            color: "#f8fafc",
+            letterSpacing: "0.8px",
+            textTransform: "uppercase",
+            margin: 0,
+            fontFamily: "var(--font-mono, monospace)",
+          }}>
+            MULTI-CHANNEL SYNCHRONIZED OSCILLOSCOPE TELEMETRY
+          </h2>
+        </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-            {/* Station ID Card */}
-            <div style={{
-              background: "rgba(15, 23, 42, 0.8)",
-              border: "1px solid rgba(51, 65, 85, 0.6)",
-              borderRadius: "8px",
-              padding: "6px 14px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}>
-              <Radio size={15} color="#38bdf8" />
-              <span style={{ fontSize: "11px", color: "#94a3b8" }}>Station ID:</span>
-              <strong style={{ fontSize: "13px", color: "#f8fafc", fontFamily: "var(--font-mono)" }}>
-                {stationId}
-              </strong>
-            </div>
+        {/* Buffer Scope Buttons */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "600", fontFamily: "var(--font-mono, monospace)" }}>
+            Buffer Scope:
+          </span>
 
-            {/* Millisecond Counter */}
-            <div style={{
-              background: "rgba(15, 23, 42, 0.8)",
-              border: "1px solid rgba(51, 65, 85, 0.6)",
-              borderRadius: "8px",
-              padding: "6px 14px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}>
-              <Clock size={15} color="#10b981" />
-              <span style={{ fontSize: "11px", color: "#94a3b8" }}>Tick (ms):</span>
-              <strong style={{ fontSize: "13px", color: "#34d399", fontFamily: "var(--font-mono)" }}>
-                {timestampMs}
-              </strong>
-            </div>
+          <div style={{ display: "flex", gap: "4px", background: "rgba(15, 23, 42, 0.8)", padding: "3px", borderRadius: "6px", border: "1px solid rgba(51, 65, 85, 0.6)" }}>
+            {[15, 30, 60, 100].map((pts) => {
+              const isActive = bufferScope === pts;
+              return (
+                <button
+                  key={pts}
+                  type="button"
+                  onClick={() => setBufferScope(pts)}
+                  style={{
+                    background: isActive ? "#0284c7" : "transparent",
+                    color: isActive ? "#ffffff" : "#94a3b8",
+                    border: "none",
+                    borderRadius: "4px",
+                    padding: "3px 10px",
+                    fontSize: "11px",
+                    fontWeight: isActive ? "700" : "500",
+                    fontFamily: "var(--font-mono, monospace)",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {pts} pts
+                </button>
+              );
+            })}
 
-            {/* Simulated Data Badge */}
-            <span style={{
-              background: "rgba(56, 189, 248, 0.15)",
-              color: "#38bdf8",
-              border: "1px solid rgba(56, 189, 248, 0.3)",
-              padding: "5px 12px",
-              borderRadius: "6px",
-              fontSize: "11px",
-              fontWeight: "700",
-              letterSpacing: "0.5px",
-              textTransform: "uppercase",
-            }}>
-              SIMULATED TELEMETRY
-            </span>
+            {/* Refresh / Reset buffer button */}
+            <button
+              type="button"
+              onClick={handleResetBuffer}
+              style={{
+                background: "transparent",
+                color: "#94a3b8",
+                border: "none",
+                borderRadius: "4px",
+                padding: "3px 8px",
+                fontSize: "11px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Reset Oscilloscope Buffer"
+            >
+              <RotateCcw size={12} />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 6-Channel Live Telemetry Cards Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
-        {cards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <div
-              key={c.title}
-              className="glass-panel"
-              style={{
-                padding: "18px",
-                border: `1px solid ${c.border}`,
-                background: "linear-gradient(180deg, rgba(15, 23, 42, 0.9) 0%, rgba(10, 15, 30, 0.95) 100%)",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <span style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "600" }}>{c.title}</span>
-                  <div style={{ background: c.bg, padding: "6px", borderRadius: "8px" }}>
-                    <Icon size={18} color={c.color} />
-                  </div>
-                </div>
+      {/* 2. 2x2 SYNCHRONIZED OSCILLOSCOPE CHANNELS GRID */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(460px, 1fr))",
+        gap: "16px",
+      }}>
+        
+        {/* ========================================================= */}
+        {/* CHANNEL 1: TEMPERATURE (°C) */}
+        {/* ========================================================= */}
+        <div className="glass-panel" style={{
+          padding: "16px 18px",
+          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          border: "1px solid rgba(51, 65, 85, 0.6)",
+          borderRadius: "8px",
+        }}>
+          {/* Channel Header Bar */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <span style={{
+              fontSize: "12px",
+              fontWeight: "800",
+              color: "#fb7185",
+              letterSpacing: "0.6px",
+              textTransform: "uppercase",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              CHANNEL 1: TEMPERATURE (°C)
+            </span>
+            <span style={{
+              fontSize: "14px",
+              fontWeight: "800",
+              color: "#f8fafc",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              {temp.toFixed(2)} °C
+            </span>
+          </div>
 
-                <div style={{ display: "flex", alignItems: "baseline", gap: "6px", margin: "8px 0" }}>
-                  <span style={{ fontSize: "28px", fontWeight: "800", color: "#f8fafc", fontFamily: "var(--font-mono)" }}>
-                    {c.value}
-                  </span>
-                  <span style={{ fontSize: "15px", fontWeight: "600", color: c.color }}>
-                    {c.unit}
-                  </span>
-                </div>
-              </div>
+          {/* Chart Canvas */}
+          <div style={{ width: "100%", height: "200px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <XAxis
+                  dataKey="indexLabel"
+                  stroke="#64748b"
+                  fontSize={10}
+                  tickLine={{ stroke: "#475569" }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={10}
+                  domain={[20, 100]}
+                  ticks={[20, 40, 60, 80, 100]}
+                  tickLine={{ stroke: "#475569" }}
+                />
+                <Tooltip
+                  content={createOscilloscopeTooltip("temperature", "°C", "#fb7185")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="temp_val"
+                  stroke="#fb7185"
+                  strokeWidth={2.2}
+                  dot={renderAnomalyDot("#fb7185")}
+                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#fb7185", strokeWidth: 2 }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                borderTop: "1px solid rgba(51, 65, 85, 0.4)",
-                paddingTop: "10px",
-                marginTop: "10px",
-                fontSize: "11px",
-              }}>
-                <span style={{ color: "#64748b" }}>{c.nominal}</span>
-                <span style={{
-                  color: c.status === "ANOMALY" ? "#f87171" : c.status === "WARNING" ? "#fbbf24" : "#34d399",
-                  fontWeight: "700",
-                }}>
-                  {c.status}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+        {/* ========================================================= */}
+        {/* CHANNEL 2: BAROMETRIC PRESSURE (hPa) */}
+        {/* ========================================================= */}
+        <div className="glass-panel" style={{
+          padding: "16px 18px",
+          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          border: "1px solid rgba(51, 65, 85, 0.6)",
+          borderRadius: "8px",
+        }}>
+          {/* Channel Header Bar */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <span style={{
+              fontSize: "12px",
+              fontWeight: "800",
+              color: "#38bdf8",
+              letterSpacing: "0.6px",
+              textTransform: "uppercase",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              CHANNEL 2: BAROMETRIC PRESSURE (hPa)
+            </span>
+            <span style={{
+              fontSize: "14px",
+              fontWeight: "800",
+              color: "#f8fafc",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              {press.toFixed(2)} hPa
+            </span>
+          </div>
+
+          {/* Chart Canvas */}
+          <div style={{ width: "100%", height: "200px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 12, right: 12, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <XAxis
+                  dataKey="indexLabel"
+                  stroke="#64748b"
+                  fontSize={10}
+                  tickLine={{ stroke: "#475569" }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={10}
+                  domain={[825, 1045]}
+                  ticks={[825, 880, 935, 990, 1045]}
+                  tickLine={{ stroke: "#475569" }}
+                />
+                <Tooltip
+                  content={createOscilloscopeTooltip("pressure", "hPa", "#38bdf8")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="press_val"
+                  stroke="#38bdf8"
+                  strokeWidth={2.2}
+                  dot={renderAnomalyDot("#38bdf8")}
+                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#38bdf8", strokeWidth: 2 }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* CHANNEL 3: RELATIVE HUMIDITY (%) */}
+        {/* ========================================================= */}
+        <div className="glass-panel" style={{
+          padding: "16px 18px",
+          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          border: "1px solid rgba(51, 65, 85, 0.6)",
+          borderRadius: "8px",
+        }}>
+          {/* Channel Header Bar */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <span style={{
+              fontSize: "12px",
+              fontWeight: "800",
+              color: "#34d399",
+              letterSpacing: "0.6px",
+              textTransform: "uppercase",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              CHANNEL 3: RELATIVE HUMIDITY (%)
+            </span>
+            <span style={{
+              fontSize: "14px",
+              fontWeight: "800",
+              color: "#f8fafc",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              {hum.toFixed(2)} %
+            </span>
+          </div>
+
+          {/* Chart Canvas */}
+          <div style={{ width: "100%", height: "200px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <XAxis
+                  dataKey="indexLabel"
+                  stroke="#64748b"
+                  fontSize={10}
+                  tickLine={{ stroke: "#475569" }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={10}
+                  domain={[0, 100]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  tickLine={{ stroke: "#475569" }}
+                />
+                <Tooltip
+                  content={createOscilloscopeTooltip("humidity", "%", "#34d399")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="hum_val"
+                  stroke="#34d399"
+                  strokeWidth={2.2}
+                  dot={renderAnomalyDot("#34d399")}
+                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#34d399", strokeWidth: 2 }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* ========================================================= */}
+        {/* CHANNEL 4: WIND SPEED (m/s) */}
+        {/* ========================================================= */}
+        <div className="glass-panel" style={{
+          padding: "16px 18px",
+          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          border: "1px solid rgba(51, 65, 85, 0.6)",
+          borderRadius: "8px",
+        }}>
+          {/* Channel Header Bar */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+            <span style={{
+              fontSize: "12px",
+              fontWeight: "800",
+              color: "#fbbf24",
+              letterSpacing: "0.6px",
+              textTransform: "uppercase",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              CHANNEL 4: WIND SPEED (m/s)
+            </span>
+            <span style={{
+              fontSize: "14px",
+              fontWeight: "800",
+              color: "#f8fafc",
+              fontFamily: "var(--font-mono, monospace)",
+            }}>
+              {wind.toFixed(2)} m/s
+            </span>
+          </div>
+
+          {/* Chart Canvas */}
+          <div style={{ width: "100%", height: "200px" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <XAxis
+                  dataKey="indexLabel"
+                  stroke="#64748b"
+                  fontSize={10}
+                  tickLine={{ stroke: "#475569" }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={10}
+                  domain={[0, 60]}
+                  ticks={[0, 15, 30, 45, 60]}
+                  tickLine={{ stroke: "#475569" }}
+                />
+                <Tooltip
+                  content={createOscilloscopeTooltip("wind_speed", "m/s", "#fbbf24")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="wind_val"
+                  stroke="#fbbf24"
+                  strokeWidth={2.2}
+                  dot={renderAnomalyDot("#fbbf24")}
+                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#fbbf24", strokeWidth: 2 }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
       </div>
-
-      {/* Main Interactive Live Time-Series Charts */}
-      <TelemetryCharts history={history} />
 
     </div>
   );
