@@ -1,17 +1,30 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { AlertTriangle, WifiOff, RefreshCw, Bell, X, History } from "lucide-react";
+import {
+  LayoutDashboard,
+  Activity,
+  BrainCircuit,
+  HeartPulse,
+  CloudRain,
+  History as HistoryIcon,
+  Cpu,
+  FlaskConical,
+  WifiOff,
+  RefreshCw,
+  Bell,
+  X,
+  ExternalLink
+} from "lucide-react";
+
 import Header from "./Header";
-import StatusBanner from "./StatusBanner";
-import SensorCards from "./SensorCards";
+import CommandCenter from "./CommandCenter";
+import AIAnomalyAnalysis from "./AIAnomalyAnalysis";
+import WeatherIntelligence from "./WeatherIntelligence";
+import SystemHardware from "./SystemHardware";
+import SimulationLab from "./SimulationLab";
 import TelemetryCharts from "./TelemetryCharts";
-import AnomalyPanel from "./AnomalyPanel";
+import SensorCards from "./SensorCards";
 import SensorHealth from "./SensorHealth";
 import AnomalyHistory from "./AnomalyHistory";
-import StatisticsCards from "./StatisticsCards";
-import SimulatorControls from "./SimulatorControls";
-import AdHocAnalyzer from "./AdHocAnalyzer";
-import CsvUploader from "./CsvUploader";
-import LiveAWSPrototype from "./LiveAWSPrototype";
 
 import {
   fetchHealth,
@@ -28,13 +41,13 @@ import {
 } from "../services/api";
 
 export default function NewDashboard({ onNavigateToLegacy }) {
+  const [activeModule, setActiveModule] = useState("command_center"); // 8 modules
   const [isConnected, setIsConnected] = useState(false);
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(true);
   const [isRetraining, setIsRetraining] = useState(false);
   const [isInjecting, setIsInjecting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
-  const [activeView, setActiveView] = useState("combined"); // 'combined', 'dashboard', 'prototype'
 
   const [currentTelemetry, setCurrentTelemetry] = useState(null);
   const [history, setHistory] = useState([]);
@@ -207,25 +220,80 @@ export default function NewDashboard({ onNavigateToLegacy }) {
     }
   };
 
+  const modules = [
+    { id: "command_center", label: "Command Center", icon: LayoutDashboard },
+    { id: "live_telemetry", label: "Live Telemetry", icon: Activity },
+    { id: "ai_analysis", label: "AI Anomaly Analysis", icon: BrainCircuit },
+    { id: "sensor_health", label: "Sensor Health", icon: HeartPulse },
+    { id: "weather_intelligence", label: "Weather Intelligence", icon: CloudRain },
+    { id: "anomaly_history", label: "Anomaly History", icon: HistoryIcon },
+    { id: "system_hardware", label: "System & Hardware", icon: Cpu },
+    { id: "simulation_lab", label: "Simulation Lab", icon: FlaskConical },
+  ];
+
   if (initialLoading) {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
         <RefreshCw size={36} color="#38bdf8" className="animate-spin" />
-        <h2 style={{ fontSize: "18px", color: "#f8fafc", fontWeight: "700" }}>Connecting to SkyGuard AI Backend...</h2>
-        <p style={{ fontSize: "13px", color: "#94a3b8" }}>Initializing SQLite telemetry stream and ML isolation forest pipeline</p>
+        <h2 style={{ fontSize: "18px", color: "#f8fafc", fontWeight: "700" }}>Connecting to SkyGuard AI Platform...</h2>
+        <p style={{ fontSize: "13px", color: "#94a3b8" }}>Initializing Dual AI Models (Isolation Forest + LSTM) & Telemetry Pipeline</p>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: "1480px", margin: "0 auto", padding: "20px" }}>
+    <div style={{ maxWidth: "1520px", margin: "0 auto", padding: "18px" }}>
       
-      {/* Subtle Top Link to Original/Legacy Dashboard */}
-      <div style={{
+      {/* Top Header Bar */}
+      <Header
+        isConnected={isConnected}
+        isSimulatorRunning={isSimulatorRunning}
+        onToggleSimulator={handleToggleSimulator}
+        onRetrain={handleRetrain}
+        isRetraining={isRetraining}
+      />
+
+      {/* 8-Module Navigation Switcher & Legacy Link */}
+      <div className="glass-panel" style={{
+        padding: "8px 14px",
+        marginBottom: "20px",
         display: "flex",
-        justifyContent: "flex-end",
-        marginBottom: "10px",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "10px",
       }}>
+        {/* Module Tabs */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+          {modules.map((m) => {
+            const Icon = m.icon;
+            const isActive = activeModule === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setActiveModule(m.id)}
+                className="btn-control"
+                style={{
+                  background: isActive ? "#0284c7" : "transparent",
+                  color: isActive ? "#ffffff" : "#94a3b8",
+                  border: isActive ? "1px solid #38bdf8" : "1px solid transparent",
+                  padding: "6px 12px",
+                  fontSize: "12px",
+                  fontWeight: isActive ? "700" : "500",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  borderRadius: "6px",
+                }}
+              >
+                <Icon size={14} color={isActive ? "#ffffff" : "#64748b"} />
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Link to Legacy Dashboard */}
         <button
           onClick={onNavigateToLegacy}
           style={{
@@ -233,9 +301,9 @@ export default function NewDashboard({ onNavigateToLegacy }) {
             color: "#94a3b8",
             border: "1px solid rgba(51, 65, 85, 0.6)",
             borderRadius: "6px",
-            padding: "4px 12px",
+            padding: "5px 12px",
             fontSize: "11px",
-            fontWeight: "500",
+            fontWeight: "600",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
@@ -251,10 +319,11 @@ export default function NewDashboard({ onNavigateToLegacy }) {
             e.currentTarget.style.borderColor = "rgba(51, 65, 85, 0.6)";
           }}
         >
-          <History size={13} /> Original Dashboard
+          <HistoryIcon size={13} /> Original Dashboard <ExternalLink size={11} />
         </button>
       </div>
 
+      {/* Disconnection Warning */}
       {!isConnected && (
         <div style={{
           background: "rgba(220, 38, 38, 0.2)",
@@ -279,6 +348,7 @@ export default function NewDashboard({ onNavigateToLegacy }) {
         </div>
       )}
 
+      {/* Live Anomaly Toast Alert */}
       {activeAlert && (
         <div style={{
           position: "fixed",
@@ -313,102 +383,80 @@ export default function NewDashboard({ onNavigateToLegacy }) {
         </div>
       )}
 
-      {/* 1. Header with Navigation Tabs */}
-      <Header
-        isConnected={isConnected}
-        isSimulatorRunning={isSimulatorRunning}
-        onToggleSimulator={handleToggleSimulator}
-        onRetrain={handleRetrain}
-        isRetraining={isRetraining}
-        activeView={activeView}
-        onViewChange={setActiveView}
-      />
-
-      {/* 2. LIVE AWS HARDWARE PROTOTYPE SECTION (Rendered on 'prototype' or 'combined') */}
-      {(activeView === "prototype" || activeView === "combined") && (
-        <section style={{ marginBottom: "28px" }}>
-          <LiveAWSPrototype
+      {/* MODULE RENDERER */}
+      <main>
+        {/* 1. Command Center */}
+        {activeModule === "command_center" && (
+          <CommandCenter
             currentTelemetry={currentTelemetry}
             sensorHealth={sensorHealth}
-            onInjectAnomaly={handleInjectAnomaly}
-            isInjecting={isInjecting}
-            isConnected={isConnected}
-          />
-        </section>
-      )}
-
-      {/* 3. CLOUD TELEMETRY & ML DASHBOARD SECTION (Rendered on 'dashboard' or 'combined') */}
-      {(activeView === "dashboard" || activeView === "combined") && (
-        <section>
-          {activeView === "combined" && (
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              margin: "32px 0 16px 0",
-              borderTop: "1px solid rgba(51, 65, 85, 0.5)",
-              paddingTop: "20px"
-            }}>
-              <h2 style={{ fontSize: "18px", fontWeight: "800", color: "#f8fafc", margin: 0 }}>
-                Cloud Telemetry & Anomaly Detection Analytics
-              </h2>
-              <span style={{ fontSize: "12px", color: "#64748b" }}>(Isolation Forest ML Engine & Database Ingestion)</span>
-            </div>
-          )}
-
-          {/* Overall System Status Banner */}
-          <StatusBanner
-            currentTelemetry={currentTelemetry}
-            sensorHealth={sensorHealth}
-          />
-
-          {/* Statistics Overview Bar */}
-          <StatisticsCards
             statistics={statistics}
-            sensorHealth={sensorHealth}
+            history={history}
+            onNavigateToAI={() => setActiveModule("ai_analysis")}
+            onNavigateToTelemetry={() => setActiveModule("live_telemetry")}
+            onNavigateToHealth={() => setActiveModule("sensor_health")}
+            onNavigateToLab={() => setActiveModule("simulation_lab")}
           />
+        )}
 
-          {/* Current Sensor Readings Cards (Temp, Press, Humidity) */}
-          <SensorCards
+        {/* 2. Live Telemetry */}
+        {activeModule === "live_telemetry" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <SensorCards
+              currentTelemetry={currentTelemetry}
+              sensorHealth={sensorHealth}
+              history={history}
+            />
+            <TelemetryCharts history={history} />
+          </div>
+        )}
+
+        {/* 3. AI Anomaly Analysis (Dedicated Dual-Model Comparison Engine) */}
+        {activeModule === "ai_analysis" && (
+          <AIAnomalyAnalysis currentTelemetry={currentTelemetry} />
+        )}
+
+        {/* 4. Sensor Health */}
+        {activeModule === "sensor_health" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <SensorHealth sensorHealth={sensorHealth} />
+          </div>
+        )}
+
+        {/* 5. Weather Intelligence */}
+        {activeModule === "weather_intelligence" && (
+          <WeatherIntelligence
             currentTelemetry={currentTelemetry}
-            sensorHealth={sensorHealth}
             history={history}
           />
+        )}
 
-          {/* Main Center Section: Live Time-Series Charts & Real-Time Anomaly Panel */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px", marginBottom: "24px" }}>
-            <div style={{ minWidth: 0 }}>
-              <TelemetryCharts history={history} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <AnomalyPanel currentTelemetry={currentTelemetry} />
-            </div>
-          </div>
-
-          {/* Sensor Health & Predictive Maintenance Advisory */}
-          <SensorHealth sensorHealth={sensorHealth} />
-
-          {/* Anomaly Testing & Injection Controls */}
-          {activeView === "dashboard" && (
-            <SimulatorControls
-              onInjectAnomaly={handleInjectAnomaly}
-              isInjecting={isInjecting}
-            />
-          )}
-
-          {/* AWS CSV Batch Dataset Ingestion & Visualizer */}
-          <CsvUploader onUploadSuccess={loadInitialData} />
-
-          {/* Recent Anomaly Incident Log */}
+        {/* 6. Anomaly History */}
+        {activeModule === "anomaly_history" && (
           <AnomalyHistory
             anomalies={anomalies}
             onFilterChange={handleFilterChange}
           />
+        )}
 
-          {/* Interactive Ad-Hoc Analyzer (Examiner Live Test Mode) */}
-          <AdHocAnalyzer onAnalysisComplete={handleIncomingTelemetry} />
-        </section>
-      )}
+        {/* 7. System & Hardware */}
+        {activeModule === "system_hardware" && (
+          <SystemHardware
+            currentTelemetry={currentTelemetry}
+            isConnected={isConnected}
+          />
+        )}
+
+        {/* 8. Simulation Lab */}
+        {activeModule === "simulation_lab" && (
+          <SimulationLab
+            onInjectAnomaly={handleInjectAnomaly}
+            isInjecting={isInjecting}
+            onUploadSuccess={loadInitialData}
+            onAnalysisComplete={handleIncomingTelemetry}
+          />
+        )}
+      </main>
 
       {/* Footer */}
       <footer style={{
@@ -420,7 +468,9 @@ export default function NewDashboard({ onNavigateToLegacy }) {
         marginTop: "30px",
       }}>
         <div>Smart India Hackathon (SIH 26073) | Automatic Weather Station Intelligent AI/ML Anomaly Detection System</div>
-        <div style={{ marginTop: "4px", color: "#475569" }}>Architecture: Arduino ATmega328P / ESP32 Node • FastAPI • Isolation Forest • SHAP • RobustScaler • React 19 • Recharts • SQLite</div>
+        <div style={{ marginTop: "4px", color: "#475569" }}>
+          Multi-Model Architecture: Isolation Forest (150 Trees) + Vectorized LSTM Sequence Autoencoder + SHAP Explainability + High-Fidelity Physics Simulator
+        </div>
       </footer>
 
     </div>

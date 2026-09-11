@@ -182,6 +182,25 @@ class AnomalyDetectionService:
         except Exception:
             ts_ms = int(time.time() * 1000) % 100000000
 
+        # 7. Dual-Model Synthesis & Agreement Engine
+        if_class = classif.anomaly_type.value if is_if_anomaly else "NORMAL"
+
+        lstm_class = classif.anomaly_type.value if is_lstm_anomaly else "NORMAL"
+        models_agree = (is_if_anomaly == is_lstm_anomaly)
+        
+        if models_agree:
+            agreement_status = "MODEL AGREEMENT"
+            if not is_if_anomaly and not is_lstm_anomaly:
+                final_ai_interpretation = "NORMAL WEATHER STATE: Both Isolation Forest and LSTM Sequence Autoencoder confirm nominal atmospheric parameters within baseline envelope."
+            else:
+                final_ai_interpretation = f"CORROBORATED ANOMALY ({classif.anomaly_type.value}): Both Isolation Forest and LSTM Sequence Autoencoder detect significant divergence from nominal meteorological dynamics."
+        else:
+            agreement_status = "MODEL DISAGREEMENT"
+            if is_if_anomaly and not is_lstm_anomaly:
+                final_ai_interpretation = f"MODEL DISAGREEMENT: Isolation Forest flags multivariate outlier (score: {if_score:.3f}), but LSTM temporal autoencoder reconstructs trajectory within threshold. REQUIRES FURTHER ANALYSIS."
+            else:
+                final_ai_interpretation = f"MODEL DISAGREEMENT: LSTM Sequence Autoencoder detects temporal sequence divergence (Loss: {lstm_loss:.3f}), while static Isolation Forest falls within bounds. REQUIRES FURTHER ANALYSIS."
+
         return {
             "timestamp": str(timestamp),
             "timestamp_ms": ts_ms,
@@ -201,20 +220,36 @@ class AnomalyDetectionService:
             "active_model": self.active_model_name,
             "models": {
                 "isolation_forest": {
+                    "name": "Isolation Forest (150 Trees)",
+                    "status": "OPERATIONAL",
                     "score": round(float(if_score), 4),
-                    "is_anomaly": is_if_anomaly,
+                    "threshold": round(float(self.detector.decision_threshold), 4),
                     "decision": round(float(raw_decision), 4),
+                    "is_anomaly": is_if_anomaly,
+                    "confidence": round(float(if_score if is_if_anomaly else 1.0 - if_score), 4),
+                    "anomaly_class": if_class,
                 },
                 "lstm_autoencoder": {
+                    "name": "Vectorized LSTM Sequence Autoencoder",
+                    "status": "OPERATIONAL",
                     "reconstruction_loss": round(float(lstm_loss), 4),
                     "reconstruction_threshold": round(float(self.lstm_detector.reconstruction_threshold), 4),
-                    "is_anomaly": is_lstm_anomaly,
                     "score": round(float(lstm_score), 4),
+                    "threshold": round(float(self.lstm_detector.reconstruction_threshold), 4),
+                    "is_anomaly": is_lstm_anomaly,
+                    "confidence": round(float(lstm_score if is_lstm_anomaly else 1.0 - lstm_score), 4),
+                    "anomaly_class": lstm_class,
+                },
+                "comparison": {
+                    "agreement": models_agree,
+                    "status": agreement_status,
+                    "final_interpretation": final_ai_interpretation,
                 },
             },
             "explainability": explanation.to_dict(),
             "health": health_report.to_dict(),
         }
+
 
     def process_batch(self, df: pd.DataFrame) -> pd.DataFrame:
         if self.detector.model is None or self.detector.preprocessor is None:
