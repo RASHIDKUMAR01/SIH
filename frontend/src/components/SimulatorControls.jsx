@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Zap, Flame, Snowflake, PauseCircle, TrendingUp, Unplug, RefreshCcw, Sliders } from "lucide-react";
 
 export default function SimulatorControls({ onInjectAnomaly, isInjecting }) {
@@ -116,6 +116,26 @@ export default function SimulatorControls({ onInjectAnomaly, isInjecting }) {
           <span>Multivariate Clash</span>
         </button>
 
+        {/* Pressure Spike / Anomaly */}
+        <button
+          onClick={() => handleInject("pressure_spike", "Barometric Pressure Anomaly", { magnitude: -40.0 })}
+          disabled={isInjecting}
+          className="btn-inject"
+        >
+          <TrendingUp size={16} color="#38bdf8" />
+          <span>Pressure Anomaly (-40 hPa)</span>
+        </button>
+
+        {/* Humidity Spike */}
+        <button
+          onClick={() => handleInject("humidity_spike", "Relative Humidity Spike", { magnitude: 35.0 })}
+          disabled={isInjecting}
+          className="btn-inject"
+        >
+          <TrendingUp size={16} color="#06b6d4" />
+          <span>Humidity Spike (+35%)</span>
+        </button>
+
         {/* Normal Baseline */}
         <button
           onClick={() => handleInject("normal", "Nominal Normal Baseline")}
@@ -126,7 +146,6 @@ export default function SimulatorControls({ onInjectAnomaly, isInjecting }) {
           <RefreshCcw size={16} color="#34d399" />
           <span>Reset to Normal</span>
         </button>
-
       </div>
     </div>
   );

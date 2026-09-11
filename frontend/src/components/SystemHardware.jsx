@@ -1,5 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Cpu, Terminal, Radio, Volume2, VolumeX, ShieldCheck, AlertTriangle, Layers, Zap, Info } from "lucide-react";
+import {
+  Cpu,
+  Terminal,
+  Radio,
+  Volume2,
+  VolumeX,
+  ShieldCheck,
+  AlertTriangle,
+  Layers,
+  Zap,
+  Info,
+  Database,
+  Server,
+  Activity,
+  CheckCircle2,
+  XCircle
+} from "lucide-react";
 
 export default function SystemHardware({ currentTelemetry, isConnected }) {
   const [buzzerMuted, setBuzzerMuted] = useState(false);
@@ -8,33 +24,36 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
 
   const isAnomaly = currentTelemetry?.is_anomaly || false;
   const severity = currentTelemetry?.severity || "LOW";
-  const temp = currentTelemetry?.temperature ?? 26.5;
-  const press = currentTelemetry?.pressure ?? 1013.2;
-  const hum = currentTelemetry?.humidity ?? 62.0;
+  const temp = currentTelemetry?.temperature ?? 24.78;
+  const press = currentTelemetry?.pressure ?? 1013.25;
+  const hum = currentTelemetry?.humidity ?? 60.0;
   const wind = currentTelemetry?.wind_speed ?? 14.5;
+  const rain = currentTelemetry?.rainfall ?? 0.0;
+  const battery = currentTelemetry?.battery_voltage ?? 4.12;
   const stationId = currentTelemetry?.station_id || "AWS-TINKER-01";
   const timestampMs = currentTelemetry?.timestamp_ms || Date.now() % 100000000;
 
-  // Append serial packets
+  // Append exact Arduino-formatted serial packets
   useEffect(() => {
     if (!currentTelemetry) return;
     const packet = {
       id: Date.now() + Math.random(),
       time: new Date().toLocaleTimeString(),
       text: JSON.stringify({
-        node: stationId,
-        ms: timestampMs,
-        T: temp,
-        P: press,
-        H: hum,
-        W: wind,
-        status: isAnomaly ? severity : "OK",
+        station_id: stationId,
+        timestamp_ms: timestampMs,
+        temperature: Number(temp.toFixed(2)),
+        humidity: Number(hum.toFixed(2)),
+        pressure: Number(press.toFixed(2)),
+        wind_speed: Number(wind.toFixed(2)),
+        rainfall: Number(rain.toFixed(2)),
+        battery_voltage: Number(battery.toFixed(2)),
       }),
     };
     setSerialLogs((prev) => [...prev.slice(-30), packet]);
   }, [currentTelemetry]);
 
-  // Determine LED pin states
+  // Determine virtual LED pin states
   const ledGreen = !isAnomaly;
   const ledYellow = isAnomaly && severity === "MEDIUM";
   const ledRed = isAnomaly && (severity === "HIGH" || severity === "CRITICAL");
@@ -43,7 +62,7 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       
-      {/* SIMULATION MODE STATUS BANNER */}
+      {/* 1. PHYSICAL HARDWARE VS SIMULATION BANNER */}
       <div className="glass-panel" style={{
         padding: "18px 24px",
         background: "linear-gradient(90deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)",
@@ -52,47 +71,113 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <div style={{
-              background: "rgba(56, 189, 248, 0.15)",
-              color: "#38bdf8",
+              background: "rgba(239, 68, 68, 0.15)",
+              color: "#f87171",
               padding: "6px 12px",
               borderRadius: "8px",
               fontWeight: "800",
               fontSize: "12px",
               letterSpacing: "0.5px",
-              border: "1px solid rgba(56, 189, 248, 0.3)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
               textTransform: "uppercase",
             }}>
-              Simulation Mode Active
+              PHYSICAL HARDWARE: NOT CONNECTED
             </div>
             <div>
               <div style={{ color: "#f8fafc", fontWeight: "700", fontSize: "14px" }}>
-                High-Fidelity Meteorological Physics & Synthetic Telemetry Generator
+                System Operating in High-Fidelity Meteorological Simulation Mode
               </div>
               <div style={{ color: "#94a3b8", fontSize: "12px" }}>
-                Physical Arduino / ESP32 hardware node is currently in standby. Telemetry stream is fully active via the simulation engine.
+                Arduino / ESP32 physical serial bridge is in standby. When connected, the serial reader directly streams into this exact pipeline.
               </div>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", fontSize: "12px" }}>
-            <span style={{ color: "#64748b" }}>Target Hardware:</span>
-            <span style={{ color: "#e2e8f0", fontFamily: "var(--font-mono)", background: "rgba(15, 23, 42, 0.6)", padding: "4px 8px", borderRadius: "4px" }}>
-              Arduino Uno ATmega328P / ESP32 (UART @ 115200 baud)
-            </span>
+          <div style={{
+            background: "rgba(16, 185, 129, 0.15)",
+            color: "#34d399",
+            border: "1px solid rgba(16, 185, 129, 0.3)",
+            padding: "6px 14px",
+            borderRadius: "8px",
+            fontWeight: "700",
+            fontSize: "12px",
+          }}>
+            SIMULATION ENGINE: AVAILABLE & STREAMING (1.0 Hz)
           </div>
         </div>
       </div>
 
-      {/* Actuator & Prototype Virtual Board */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+      {/* 2. SYSTEM STATUS METRIC CARDS */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
         
-        {/* Virtual Microcontroller & LED Output Panel */}
+        {/* Physical Hardware */}
+        <div className="glass-panel" style={{ padding: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>
+              Physical Hardware
+            </span>
+            <XCircle size={16} color="#f87171" />
+          </div>
+          <div style={{ fontSize: "16px", fontWeight: "800", color: "#f87171" }}>
+            NOT CONNECTED
+          </div>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>Arduino Standby (COM/UART)</span>
+        </div>
+
+        {/* Simulation Status */}
+        <div className="glass-panel" style={{ padding: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>
+              Simulation Engine
+            </span>
+            <CheckCircle2 size={16} color="#34d399" />
+          </div>
+          <div style={{ fontSize: "16px", fontWeight: "800", color: "#34d399" }}>
+            AVAILABLE & ACTIVE
+          </div>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>1.0 Hz Physics Generator</span>
+        </div>
+
+        {/* Backend API */}
+        <div className="glass-panel" style={{ padding: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>
+              Backend API Status
+            </span>
+            <Server size={16} color="#38bdf8" />
+          </div>
+          <div style={{ fontSize: "16px", fontWeight: "800", color: isConnected ? "#34d399" : "#f87171" }}>
+            {isConnected ? "ONLINE (FastAPI)" : "OFFLINE"}
+          </div>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>REST + WebSocket Stream</span>
+        </div>
+
+        {/* SQLite Database */}
+        <div className="glass-panel" style={{ padding: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: "600", textTransform: "uppercase" }}>
+              Database Status
+            </span>
+            <Database size={16} color="#a855f7" />
+          </div>
+          <div style={{ fontSize: "16px", fontWeight: "800", color: "#a855f7" }}>
+            CONNECTED
+          </div>
+          <span style={{ fontSize: "11px", color: "#64748b" }}>SQLite (aws_telemetry.db)</span>
+        </div>
+
+      </div>
+
+      {/* 3. VIRTUAL MICROCONTROLLER BOARD & LIVE SERIAL MONITOR */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "20px" }}>
+        
+        {/* Virtual Arduino Output Actuators */}
         <div className="glass-panel" style={{ padding: "20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <Cpu size={18} color="#38bdf8" />
               <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#f8fafc", margin: 0 }}>
-                Microcontroller Actuator States
+                Arduino Prototype Actuator Indicators
               </h3>
             </div>
             <span style={{ fontSize: "11px", color: "#94a3b8" }}>Node: {stationId}</span>
@@ -214,7 +299,7 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <Terminal size={18} color="#10b981" />
               <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#f8fafc", margin: 0 }}>
-                Live UART Serial Packet Stream
+                Live UART Serial Telemetry Stream
               </h3>
             </div>
             <span style={{ fontSize: "11px", color: "#10b981", fontFamily: "var(--font-mono)" }}>115200 BAUD</span>
@@ -248,10 +333,10 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
 
       </div>
 
-      {/* Hardware Architecture Flow Diagram */}
+      {/* 4. PLANNED ARDUINO WEATHER-STATION HARDWARE ARCHITECTURE DIAGRAM */}
       <div className="glass-panel" style={{ padding: "22px" }}>
         <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#f8fafc", marginBottom: "14px" }}>
-          End-to-End Edge-to-Cloud Hardware Architecture Flow
+          Planned Arduino Weather Station Hardware Architecture
         </h3>
 
         <div style={{
@@ -261,27 +346,27 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
           textAlign: "center",
         }}>
           <div style={{ background: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "8px", border: "1px solid rgba(51, 65, 85, 0.5)" }}>
-            <div style={{ fontSize: "11px", color: "#38bdf8", fontWeight: "700", textTransform: "uppercase" }}>Stage 1</div>
+            <div style={{ fontSize: "11px", color: "#38bdf8", fontWeight: "700", textTransform: "uppercase" }}>Hardware Stage 1</div>
             <div style={{ fontWeight: "700", color: "#f8fafc", marginTop: "4px" }}>Sensors & Transducers</div>
-            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>DHT22, BMP280, Anemometer</div>
+            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>DHT22, BMP280, Anemometer, Rain Gauge</div>
           </div>
 
           <div style={{ background: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "8px", border: "1px solid rgba(51, 65, 85, 0.5)" }}>
-            <div style={{ fontSize: "11px", color: "#38bdf8", fontWeight: "700", textTransform: "uppercase" }}>Stage 2</div>
-            <div style={{ fontWeight: "700", color: "#f8fafc", marginTop: "4px" }}>MCU Edge Node</div>
-            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>ATmega328P / ESP32 ADC & Packetizer</div>
+            <div style={{ fontSize: "11px", color: "#38bdf8", fontWeight: "700", textTransform: "uppercase" }}>Hardware Stage 2</div>
+            <div style={{ fontWeight: "700", color: "#f8fafc", marginTop: "4px" }}>Arduino Edge Controller</div>
+            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>ATmega328P ADC & Serial JSON Framer</div>
           </div>
 
           <div style={{ background: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "8px", border: "1px solid rgba(51, 65, 85, 0.5)" }}>
-            <div style={{ fontSize: "11px", color: "#a855f7", fontWeight: "700", textTransform: "uppercase" }}>Stage 3</div>
+            <div style={{ fontSize: "11px", color: "#a855f7", fontWeight: "700", textTransform: "uppercase" }}>Cloud Stage 3</div>
             <div style={{ fontWeight: "700", color: "#f8fafc", marginTop: "4px" }}>Dual-Model AI Core</div>
-            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>Isolation Forest + LSTM Sequence Autoencoder</div>
+            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>Isolation Forest + LSTM Autoencoder</div>
           </div>
 
           <div style={{ background: "rgba(15, 23, 42, 0.6)", padding: "14px", borderRadius: "8px", border: "1px solid rgba(51, 65, 85, 0.5)" }}>
-            <div style={{ fontSize: "11px", color: "#10b981", fontWeight: "700", textTransform: "uppercase" }}>Stage 4</div>
-            <div style={{ fontWeight: "700", color: "#f8fafc", marginTop: "4px" }}>Actuators & Dashboard</div>
-            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>LED Pins D7-D9, Buzzer D10, WebSocket UI</div>
+            <div style={{ fontSize: "11px", color: "#10b981", fontWeight: "700", textTransform: "uppercase" }}>Action Stage 4</div>
+            <div style={{ fontWeight: "700", color: "#f8fafc", marginTop: "4px" }}>Actuators & Control UI</div>
+            <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>LED Pins D7-D9, Alarm D10, WebSocket UI</div>
           </div>
         </div>
       </div>
