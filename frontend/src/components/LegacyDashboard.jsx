@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, WifiOff, RefreshCw, Bell, X, ArrowLeft, CloudRain, Activity } from "lucide-react";
+import Header from "./Header";
+import LiveAWSPrototype from "./LiveAWSPrototype";
 import StatusBanner from "./StatusBanner";
 import SensorCards from "./SensorCards";
 import TelemetryCharts from "./TelemetryCharts";
@@ -26,6 +28,7 @@ import {
 } from "../services/api";
 
 export default function LegacyDashboard({ onNavigateToNew }) {
+  const [activeView, setActiveView] = useState("dashboard"); // "dashboard", "prototype", "combined"
   const [isConnected, setIsConnected] = useState(false);
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(true);
   const [isRetraining, setIsRetraining] = useState(false);
@@ -339,153 +342,84 @@ export default function LegacyDashboard({ onNavigateToNew }) {
         </div>
       )}
 
-      {/* ORIGINAL HEADER */}
-      <header className="glass-panel" style={{ padding: "16px 24px", marginBottom: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
-          
-          {/* Logo & Problem Statement Title */}
-          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-            <div style={{
-              width: "48px",
-              height: "48px",
-              borderRadius: "12px",
-              background: "linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 0 20px rgba(14, 165, 233, 0.4)",
-            }}>
-              <CloudRain size={28} color="#ffffff" />
+      {/* ORIGINAL HEADER WITH 3-WAY VIEW SWITCHER */}
+      <Header
+        isConnected={isConnected}
+        isSimulatorRunning={isSimulatorRunning}
+        onToggleSimulator={handleToggleSimulator}
+        onRetrain={handleRetrain}
+        isRetraining={isRetraining}
+        activeView={activeView}
+        onViewChange={setActiveView}
+      />
+
+      {/* VIEW 1: TELEMETRY DASHBOARD */}
+      {(activeView === "dashboard" || activeView === "combined") && (
+        <section style={{ marginBottom: activeView === "combined" ? "32px" : "0" }}>
+          {/* 1. Overall System Status Banner */}
+          <StatusBanner
+            currentTelemetry={currentTelemetry}
+            sensorHealth={sensorHealth}
+          />
+
+          {/* 2. Statistics Overview Bar */}
+          <StatisticsCards
+            statistics={statistics}
+            sensorHealth={sensorHealth}
+          />
+
+          {/* 3. Current Sensor Readings Cards (Temp, Press, Humidity) */}
+          <SensorCards
+            currentTelemetry={currentTelemetry}
+            sensorHealth={sensorHealth}
+            history={history}
+          />
+
+          {/* 4. Main Center Section: Live Time-Series Charts & Real-Time Anomaly Panel */}
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px", marginBottom: "24px" }}>
+            <div style={{ minWidth: 0 }}>
+              <TelemetryCharts history={history} />
             </div>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <h1 style={{ fontSize: "24px", fontWeight: "800", letterSpacing: "-0.5px", color: "#f8fafc", margin: 0 }}>
-                  SkyGuard <span style={{ color: "#38bdf8" }}>AI</span>
-                </h1>
-                <span style={{
-                  background: "rgba(14, 165, 233, 0.15)",
-                  color: "#38bdf8",
-                  border: "1px solid rgba(14, 165, 233, 0.3)",
-                  padding: "2px 8px",
-                  borderRadius: "6px",
-                  fontSize: "11px",
-                  fontWeight: "700",
-                  letterSpacing: "0.5px"
-                }}>
-                  SIH 26073
-                </span>
-              </div>
-              <p style={{ fontSize: "13px", color: "#94a3b8", margin: "2px 0 0 0" }}>
-                Automatic Weather Station Intelligent Anomaly Detection System
-              </p>
+            <div style={{ minWidth: 0 }}>
+              <AnomalyPanel currentTelemetry={currentTelemetry} />
             </div>
           </div>
 
-          {/* Status Badges & Controls */}
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-            
-            {/* Station Metadata */}
-            <div style={{
-              background: "rgba(15, 23, 42, 0.6)",
-              border: "1px solid rgba(51, 65, 85, 0.5)",
-              borderRadius: "8px",
-              padding: "6px 12px",
-              fontSize: "12px",
-              color: "#cbd5e1"
-            }}>
-              <span style={{ color: "#64748b" }}>Station: </span>
-              <strong style={{ color: "#e2e8f0" }}>AWS-SIH-001</strong>
-              <span style={{ margin: "0 6px", color: "#475569" }}>|</span>
-              <span style={{ fontFamily: "monospace", color: "#94a3b8" }}>{timeStr}</span>
-            </div>
+          {/* 5. Sensor Health & Predictive Maintenance Advisory */}
+          <SensorHealth sensorHealth={sensorHealth} />
 
-            {/* Backend Connection Indicator */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }}>
-              <div className={isConnected ? "live-indicator" : "live-indicator-danger"} />
-              <span style={{ color: isConnected ? "#34d399" : "#f87171", fontWeight: "600" }}>
-                {isConnected ? "API LIVE" : "DISCONNECTED"}
-              </span>
-            </div>
+          {/* 6. Anomaly Testing & Injection Controls */}
+          <SimulatorControls
+            onInjectAnomaly={handleInjectAnomaly}
+            isInjecting={isInjecting}
+          />
 
-            {/* Simulator Stream Toggle */}
-            <button
-              onClick={handleToggleSimulator}
-              className={`btn-control ${isSimulatorRunning ? "btn-danger" : "btn-primary"}`}
-              title="Toggle Background Synthetic Telemetry Stream"
-            >
-              <Activity size={15} />
-              {isSimulatorRunning ? "Pause Stream" : "Start Stream"}
-            </button>
+          {/* 7. AWS CSV Batch Dataset Ingestion & Visualizer */}
+          <CsvUploader onUploadSuccess={loadInitialData} />
 
-            {/* Model Retrain Trigger */}
-            <button
-              onClick={handleRetrain}
-              disabled={isRetraining}
-              className="btn-control"
-              style={{ borderColor: "#a855f7", color: "#d8b4fe" }}
-              title="Trigger Background Model Retraining with Calibrated Isolation Forest"
-            >
-              <RefreshCw size={14} className={isRetraining ? "animate-spin" : ""} />
-              {isRetraining ? "Retraining..." : "Retrain ML"}
-            </button>
+          {/* 8. Recent Anomaly Incident Log */}
+          <AnomalyHistory
+            anomalies={anomalies}
+            onFilterChange={handleFilterChange}
+          />
 
-          </div>
+          {/* 9. Interactive Ad-Hoc Analyzer (Examiner Live Test Mode) */}
+          <AdHocAnalyzer onAnalysisComplete={handleIncomingTelemetry} />
+        </section>
+      )}
 
-        </div>
-      </header>
-
-      {/* ORIGINAL DASHBOARD MODULES */}
-      <section>
-        {/* 1. Overall System Status Banner */}
-        <StatusBanner
-          currentTelemetry={currentTelemetry}
-          sensorHealth={sensorHealth}
-        />
-
-        {/* 2. Statistics Overview Bar */}
-        <StatisticsCards
-          statistics={statistics}
-          sensorHealth={sensorHealth}
-        />
-
-        {/* 3. Current Sensor Readings Cards (Temp, Press, Humidity) */}
-        <SensorCards
-          currentTelemetry={currentTelemetry}
-          sensorHealth={sensorHealth}
-          history={history}
-        />
-
-        {/* 4. Main Center Section: Live Time-Series Charts & Real-Time Anomaly Panel */}
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px", marginBottom: "24px" }}>
-          <div style={{ minWidth: 0 }}>
-            <TelemetryCharts history={history} />
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <AnomalyPanel currentTelemetry={currentTelemetry} />
-          </div>
-        </div>
-
-        {/* 5. Sensor Health & Predictive Maintenance Advisory */}
-        <SensorHealth sensorHealth={sensorHealth} />
-
-        {/* 6. Anomaly Testing & Injection Controls */}
-        <SimulatorControls
-          onInjectAnomaly={handleInjectAnomaly}
-          isInjecting={isInjecting}
-        />
-
-        {/* 7. AWS CSV Batch Dataset Ingestion & Visualizer */}
-        <CsvUploader onUploadSuccess={loadInitialData} />
-
-        {/* 8. Recent Anomaly Incident Log */}
-        <AnomalyHistory
-          anomalies={anomalies}
-          onFilterChange={handleFilterChange}
-        />
-
-        {/* 9. Interactive Ad-Hoc Analyzer (Examiner Live Test Mode) */}
-        <AdHocAnalyzer onAnalysisComplete={handleIncomingTelemetry} />
-      </section>
+      {/* VIEW 2: LIVE AWS PROTOTYPE (LED LIGHTS, BUZZER & SERIAL TERMINAL) */}
+      {(activeView === "prototype" || activeView === "combined") && (
+        <section>
+          <LiveAWSPrototype
+            currentTelemetry={currentTelemetry}
+            sensorHealth={sensorHealth}
+            onInjectAnomaly={handleInjectAnomaly}
+            isInjecting={isInjecting}
+            isConnected={isConnected}
+          />
+        </section>
+      )}
 
       {/* ORIGINAL FOOTER */}
       <footer style={{
