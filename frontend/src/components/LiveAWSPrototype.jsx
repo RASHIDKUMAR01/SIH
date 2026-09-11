@@ -79,30 +79,69 @@ export default function LiveAWSPrototype({
     }
   }, [currentTelemetry, stationId, timestampMs, temp, hum, press, wind, isAnomaly, anomalyType]);
 
-  // Sound Synthesizer on Anomaly Buzzer
-  useEffect(() => {
-    if (soundEnabled && isAnomaly && severity === "CRITICAL") {
-      try {
-        if (!audioCtxRef.current) {
-          audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        const ctx = audioCtxRef.current;
-        if (ctx.state === "suspended") ctx.resume();
+  // Web Audio API helper for Arduino Piezo Buzzer Sound (2.4 kHz PWM Pulse)
+  const getAudioContext = () => {
+    if (!audioCtxRef.current) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        audioCtxRef.current = new AudioCtx();
+      }
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+      audioCtxRef.current.resume();
+    }
+    return audioCtxRef.current;
+  };
 
+  const playBuzzerSound = (pattern = "alarm") => {
+    try {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      if (pattern === "test" || pattern === "single") {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 alarm pitch
-        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
-        gain.gain.setValueAtTime(0.08, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+        osc.type = "square";
+        osc.frequency.setValueAtTime(2400, now);
+
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.28);
-      } catch (e) {
-        console.warn("Audio synthesizer error:", e);
+        osc.start(now);
+        osc.stop(now + 0.14);
+      } else {
+        const pulses = [
+          { time: 0.0, dur: 0.09, freq: 2400 },
+          { time: 0.13, dur: 0.09, freq: 2400 },
+          { time: 0.26, dur: 0.12, freq: 2800 },
+        ];
+        pulses.forEach(({ time, dur, freq }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "square";
+          osc.frequency.setValueAtTime(freq, now + time);
+
+          gain.gain.setValueAtTime(0.15, now + time);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + time + dur);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + time);
+          osc.stop(now + time + dur);
+        });
       }
+    } catch (e) {
+      console.warn("Piezo Buzzer Web Audio synthesis error:", e);
+    }
+  };
+
+  // Sound Synthesizer on Anomaly Buzzer
+  useEffect(() => {
+    if (soundEnabled && isAnomaly && (severity === "HIGH" || severity === "CRITICAL")) {
+      playBuzzerSound("alarm");
     }
   }, [soundEnabled, isAnomaly, severity, currentTelemetry?.timestamp]);
 
@@ -323,22 +362,56 @@ export default function LiveAWSPrototype({
                 </h3>
               </div>
 
-              {/* Sound Mute/Unmute Toggle */}
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className="btn-control"
-                style={{
-                  background: soundEnabled ? "rgba(245, 158, 11, 0.2)" : "rgba(15, 23, 42, 0.6)",
-                  borderColor: soundEnabled ? "#f59e0b" : "rgba(51, 65, 85, 0.5)",
-                  color: soundEnabled ? "#fbbf24" : "#94a3b8",
-                  fontSize: "11px",
-                  padding: "6px 10px",
-                }}
-                title="Toggle Web Audio Piezo Buzzer Synthesizer"
-              >
-                {soundEnabled ? <Volume2 size={15} color="#fbbf24" /> : <VolumeX size={15} />}
-                <span>{soundEnabled ? "Audio Alarm ON" : "Audio Alarm Muted"}</span>
-              </button>
+              {/* Audio Controls */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => playBuzzerSound("test")}
+                  className="btn-control"
+                  style={{
+                    background: "rgba(56, 189, 248, 0.15)",
+                    borderColor: "rgba(56, 189, 248, 0.4)",
+                    color: "#38bdf8",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    padding: "6px 12px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                  title="Test 2.4 kHz Arduino Piezo Buzzer Sound in Browser Speakers"
+                >
+                  <Volume2 size={14} />
+                  <span>🔊 Test Buzzer (2.4 kHz)</span>
+                </button>
+
+                {/* Sound Mute/Unmute Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextSound = !soundEnabled;
+                    setSoundEnabled(nextSound);
+                    if (nextSound) {
+                      playBuzzerSound("single");
+                    }
+                  }}
+                  className="btn-control"
+                  style={{
+                    background: soundEnabled ? "rgba(245, 158, 11, 0.2)" : "rgba(15, 23, 42, 0.6)",
+                    borderColor: soundEnabled ? "#f59e0b" : "rgba(51, 65, 85, 0.5)",
+                    color: soundEnabled ? "#fbbf24" : "#94a3b8",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    padding: "6px 10px",
+                    cursor: "pointer",
+                  }}
+                  title="Toggle Web Audio Piezo Buzzer Synthesizer"
+                >
+                  {soundEnabled ? <Volume2 size={15} color="#fbbf24" /> : <VolumeX size={15} />}
+                  <span>{soundEnabled ? "Audio Alarm ON" : "Audio Alarm Muted"}</span>
+                </button>
+              </div>
             </div>
 
             {/* Tri-Color Physical LEDs Simulation */}
@@ -408,7 +481,11 @@ export default function LiveAWSPrototype({
                 </div>
 
                 {/* Piezo Buzzer Indicator */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                <div
+                  onClick={() => playBuzzerSound("test")}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", cursor: "pointer" }}
+                  title="Click to test 2.4 kHz Piezo Buzzer tone"
+                >
                   <div style={{
                     width: "36px",
                     height: "36px",
@@ -425,7 +502,7 @@ export default function LiveAWSPrototype({
                   <span style={{ fontSize: "12px", fontWeight: "700", color: isBuzzerActive ? "#f87171" : "#64748b" }}>
                     BUZZER {isBuzzerActive ? "(ACTIVE)" : "(SILENT)"}
                   </span>
-                  <span style={{ fontSize: "10px", color: "#64748b" }}>PWM Pin D6</span>
+                  <span style={{ fontSize: "10px", color: "#38bdf8" }}>Click to Test</span>
                 </div>
 
               </div>

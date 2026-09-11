@@ -21,6 +21,7 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
   const [buzzerMuted, setBuzzerMuted] = useState(false);
   const [serialLogs, setSerialLogs] = useState([]);
   const terminalRef = useRef(null);
+  const audioCtxRef = useRef(null);
 
   const isAnomaly = currentTelemetry?.is_anomaly || false;
   const severity = currentTelemetry?.severity || "LOW";
@@ -58,6 +59,74 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
   const ledYellow = isAnomaly && severity === "MEDIUM";
   const ledRed = isAnomaly && (severity === "HIGH" || severity === "CRITICAL");
   const buzzerActive = isAnomaly && (severity === "HIGH" || severity === "CRITICAL") && !buzzerMuted;
+
+  // Web Audio API helper for Arduino Piezo Buzzer Sound (2.4 kHz PWM Pulse)
+  const getAudioContext = () => {
+    if (!audioCtxRef.current) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        audioCtxRef.current = new AudioCtx();
+      }
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+      audioCtxRef.current.resume();
+    }
+    return audioCtxRef.current;
+  };
+
+  const playPiezoAlarmSound = (pattern = "alarm") => {
+    try {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      if (pattern === "test" || pattern === "single") {
+        // Single 2.4 kHz test beep (120ms)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(2400, now);
+
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.14);
+      } else {
+        // 3-Pulse urgent alarm burst: [2400Hz, 2400Hz, 2800Hz]
+        const pulses = [
+          { time: 0.0, dur: 0.09, freq: 2400 },
+          { time: 0.13, dur: 0.09, freq: 2400 },
+          { time: 0.26, dur: 0.12, freq: 2800 },
+        ];
+        pulses.forEach(({ time, dur, freq }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "square";
+          osc.frequency.setValueAtTime(freq, now + time);
+
+          gain.gain.setValueAtTime(0.15, now + time);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + time + dur);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + time);
+          osc.stop(now + time + dur);
+        });
+      }
+    } catch (e) {
+      console.warn("Piezo Buzzer Web Audio synthesis error:", e);
+    }
+  };
+
+  // Sound Synthesizer: Trigger buzzer tone whenever an anomaly occurs and not muted
+  useEffect(() => {
+    if (buzzerActive) {
+      playPiezoAlarmSound("alarm");
+    }
+  }, [buzzerActive, currentTelemetry?.timestamp]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -258,38 +327,96 @@ export default function SystemHardware({ currentTelemetry, isConnected }) {
 
           {/* Piezo Buzzer Actuator */}
           <div style={{
-            background: "rgba(15, 23, 42, 0.6)",
-            border: "1px solid rgba(51, 65, 85, 0.5)",
+            background: buzzerActive ? "rgba(239, 68, 68, 0.12)" : "rgba(15, 23, 42, 0.6)",
+            border: buzzerActive ? "1px solid #ef4444" : "1px solid rgba(51, 65, 85, 0.5)",
             borderRadius: "8px",
-            padding: "12px 16px",
+            padding: "14px 16px",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            flexWrap: "wrap",
+            gap: "12px",
+            boxShadow: buzzerActive ? "0 0 16px rgba(239, 68, 68, 0.35)" : "none",
+            transition: "all 0.3s ease",
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <Volume2 size={18} color={buzzerActive ? "#ef4444" : "#94a3b8"} />
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "8px",
+                background: buzzerActive ? "rgba(239, 68, 68, 0.25)" : "rgba(30, 41, 59, 0.6)",
+                border: buzzerActive ? "2px solid #ef4444" : "1px solid rgba(71, 85, 105, 0.5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+                <Volume2
+                  size={20}
+                  color={buzzerActive ? "#ef4444" : buzzerMuted ? "#64748b" : "#38bdf8"}
+                  style={{ animation: buzzerActive ? "pulse 0.8s infinite" : "none" }}
+                />
+              </div>
               <div>
-                <div style={{ fontSize: "12px", fontWeight: "700", color: "#f8fafc" }}>Pin D10 Piezo Alarm Buzzer</div>
-                <div style={{ fontSize: "11px", color: buzzerActive ? "#f87171" : "#64748b" }}>
-                  {buzzerActive ? "ALARM TRIGGERED (2.4 kHz Pulse)" : "STANDBY (Silent)"}
+                <div style={{ fontSize: "13px", fontWeight: "700", color: "#f8fafc" }}>
+                  Pin D10 Piezo Alarm Buzzer
+                </div>
+                <div style={{ fontSize: "11px", color: buzzerActive ? "#f87171" : buzzerMuted ? "#94a3b8" : "#64748b" }}>
+                  {buzzerActive
+                    ? "ALARM TRIGGERED (2.4 kHz Multi-Beep Active)"
+                    : buzzerMuted
+                    ? "MUTED BY OPERATOR"
+                    : "STANDBY (Silent)"}
                 </div>
               </div>
             </div>
 
-            <button
-              onClick={() => setBuzzerMuted(!buzzerMuted)}
-              style={{
-                background: buzzerMuted ? "#475569" : "rgba(56, 189, 248, 0.2)",
-                color: "#f8fafc",
-                border: "none",
-                borderRadius: "6px",
-                padding: "4px 10px",
-                fontSize: "11px",
-                cursor: "pointer",
-              }}
-            >
-              {buzzerMuted ? "Unmute Audio" : "Mute Audio"}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => playPiezoAlarmSound("test")}
+                style={{
+                  background: "rgba(56, 189, 248, 0.15)",
+                  color: "#38bdf8",
+                  border: "1px solid rgba(56, 189, 248, 0.4)",
+                  borderRadius: "6px",
+                  padding: "6px 12px",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "all 0.2s ease",
+                }}
+                title="Test 2.4 kHz Piezo Buzzer Tone in Browser Speakers"
+              >
+                <Volume2 size={13} />
+                <span>🔊 Test Buzzer (2.4 kHz)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const nextState = !buzzerMuted;
+                  setBuzzerMuted(nextState);
+                  if (!nextState) {
+                    playPiezoAlarmSound("single");
+                  }
+                }}
+                style={{
+                  background: buzzerMuted ? "rgba(100, 116, 139, 0.2)" : "rgba(239, 68, 68, 0.15)",
+                  color: buzzerMuted ? "#94a3b8" : "#f87171",
+                  border: buzzerMuted ? "1px solid rgba(100, 116, 139, 0.4)" : "1px solid rgba(239, 68, 68, 0.4)",
+                  borderRadius: "6px",
+                  padding: "6px 12px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                }}
+              >
+                {buzzerMuted ? "Unmute Buzzer" : "Mute Buzzer"}
+              </button>
+            </div>
           </div>
         </div>
 
