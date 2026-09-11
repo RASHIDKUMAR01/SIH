@@ -433,6 +433,7 @@ def select_active_model(payload: Dict[str, str]):
 
 
 @router.get("/model/status", summary="Get Active AI Model Architecture & Diagnostic Status")
+@router.get("/lstm/status", summary="Get Active AI Model Architecture & Diagnostic Status (Alias)")
 def get_model_status():
     return {
         "active_model": simulator_worker.anomaly_service.active_model_name,
@@ -453,4 +454,25 @@ def get_model_status():
         },
         "explainable_ai": "SHAP TreeExplainer + Root Cause NLG",
     }
+
+
+@router.post("/lstm/predict", summary="Direct LSTM Autoencoder Sequence Prediction")
+def predict_lstm_sequence(payload: Dict[str, Any]):
+    temp = float(payload.get("temperature", 26.5))
+    press = float(payload.get("pressure", 1013.25))
+    hum = float(payload.get("humidity", 60.0))
+    ts = payload.get("timestamp", datetime.now(timezone.utc).isoformat())
+
+    reading = standalone_service.process_reading(ts, temp, press, hum)
+    lstm_info = reading.get("models", {}).get("lstm_autoencoder", {})
+    return {
+        "status": "success",
+        "is_anomaly": lstm_info.get("is_anomaly", False),
+        "reconstruction_loss": lstm_info.get("reconstruction_loss", 0.0),
+        "reconstruction_threshold": lstm_info.get("reconstruction_threshold", 0.7113),
+        "anomaly_score": lstm_info.get("normalized_score", 0.0),
+        "active_model": "lstm_autoencoder",
+        "data": reading,
+    }
+
 
