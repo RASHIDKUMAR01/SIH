@@ -50,6 +50,7 @@ export default function NewDashboard({ onNavigateToLegacy }) {
   const [isInjecting, setIsInjecting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [timeStr, setTimeStr] = useState("");
 
   const [currentTelemetry, setCurrentTelemetry] = useState(null);
   const [history, setHistory] = useState([]);
@@ -59,6 +60,17 @@ export default function NewDashboard({ onNavigateToLegacy }) {
 
   const [activeAlert, setActiveAlert] = useState(null);
   const lastAnomalyTimeRef = useRef(null);
+
+  // Real-time UTC clock updater
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setTimeStr(now.toUTCString().replace("GMT", "UTC"));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleIncomingTelemetry = useCallback((data) => {
     if (!data) return;
