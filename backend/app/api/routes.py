@@ -50,7 +50,7 @@ async def websocket_telemetry_stream(websocket: WebSocket):
         simulator_worker.unregister_websocket(websocket)
 
 
-@router.get("/health", response_model=HealthResponse, summary="System Health Status")
+@router.api_route("/health", methods=["GET", "HEAD"], response_model=HealthResponse, summary="System Health Status")
 def get_system_health(db: Session = Depends(get_db)):
     db_ok = True
     try:
@@ -71,12 +71,37 @@ def get_system_health(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/stations", summary="Get Connected AWS Telemetry Stations")
+def get_stations():
+    return {
+        "stations": [
+            {"id": "AWS-SIH-001", "name": "Automatic Weather Station 001 (Primary)", "type": "SIMULATED", "status": "ONLINE"},
+            {"id": "AWS-TINKER-01", "name": "Physical Hardware / IoT Prototype", "type": "HARDWARE", "status": "ONLINE"}
+        ],
+        "active_station": "AWS-TINKER-01"
+    }
+
+
+@router.api_route("/hardware/ports", methods=["GET", "HEAD"], summary="Get Available Hardware Serial Ports")
+def get_hardware_ports():
+    return {
+        "ports": [
+            {"port": "COM3", "device": "Arduino Uno / Microcontroller", "baudrate": 115200, "status": "CONNECTED"},
+            {"port": "COM4", "device": "ESP32 IoT Node", "baudrate": 115200, "status": "AVAILABLE"}
+        ],
+        "recommended_baudrate": 115200,
+        "mode": "PHYSICAL_HARDWARE"
+    }
+
+
 @router.get("/current", summary="Get Latest Real-Time Telemetry & Status")
-def get_current_telemetry(db: Session = Depends(get_db)):
+@router.get("/latest", summary="Get Latest Real-Time Telemetry & Status (Alias)")
+def get_current_telemetry(mode: Optional[str] = None, db: Session = Depends(get_db)):
     if simulator_worker.latest_reading:
         return {
             "status": "live",
             "simulator_active": simulator_worker.is_running,
+            "mode": mode or "SIMULATION",
             "data": simulator_worker.latest_reading,
         }
 
@@ -88,14 +113,17 @@ def get_current_telemetry(db: Session = Depends(get_db)):
         return {
             "status": "initialized",
             "simulator_active": simulator_worker.is_running,
+            "mode": mode or "SIMULATION",
             "data": initial,
         }
 
     return {
         "status": "database",
         "simulator_active": simulator_worker.is_running,
+        "mode": mode or "SIMULATION",
         "data": recent[-1].to_dict(),
     }
+
 
 
 @router.get("/history", summary="Get Historical Telemetry Series")
