@@ -48,7 +48,7 @@ export default function NewDashboard({ onNavigateToLegacy }) {
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(true);
   const [isRetraining, setIsRetraining] = useState(false);
   const [isInjecting, setIsInjecting] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
   const [currentTelemetry, setCurrentTelemetry] = useState(null);
@@ -234,16 +234,6 @@ export default function NewDashboard({ onNavigateToLegacy }) {
   ];
 
   const currentModuleObj = modules.find((m) => m.id === activeModule) || modules[0];
-
-  if (initialLoading) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px", background: "#0a0e17", color: "#f8fafc" }}>
-        <RefreshCw size={40} color="#38bdf8" className="animate-spin" />
-        <h2 style={{ fontSize: "20px", color: "#f8fafc", fontWeight: "700" }}>Connecting to SkyGuard AI Platform...</h2>
-        <p style={{ fontSize: "14px", color: "#94a3b8" }}>Initializing Dual AI Models (Isolation Forest + LSTM) & Telemetry Pipeline</p>
-      </div>
-    );
-  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#0a0e17", color: "#f8fafc" }}>
