@@ -157,7 +157,7 @@ export default function WeatherIntelligence({ currentTelemetry, history }) {
               2. Hydrostatic Barometric Lapse
             </div>
             <p style={{ fontSize: "12px", color: "#94a3b8", lineHeight: "1.5", margin: 0 }}>
-              Atmospheric barometric pressure is continuously monitored against standard geopotential height lapse rates ($\Delta P / \Delta t \le 3.0\text{ hPa/hr}$) to detect true storm fronts versus faulty transducer spikes.
+              Atmospheric barometric pressure is continuously monitored against standard geopotential height lapse rates (ΔP / Δt ≤ 3.0 hPa/hr) to detect true storm fronts versus faulty transducer spikes.
             </p>
           </div>
         </div>
