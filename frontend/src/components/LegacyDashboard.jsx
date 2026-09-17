@@ -27,7 +27,7 @@ import {
   connectTelemetryWebSocket,
 } from "../services/api";
 
-export default function LegacyDashboard({ onNavigateToNew }) {
+export default function LegacyDashboard({ onNavigateToNew, onLogout, user }) {
   const [activeView, setActiveView] = useState("dashboard"); // "dashboard", "prototype", "combined"
   const [isConnected, setIsConnected] = useState(false);
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(true);
@@ -351,6 +351,8 @@ export default function LegacyDashboard({ onNavigateToNew }) {
         isRetraining={isRetraining}
         activeView={activeView}
         onViewChange={setActiveView}
+        onLogout={onLogout}
+        user={user}
       />
 
       {/* VIEW 1: TELEMETRY DASHBOARD */}

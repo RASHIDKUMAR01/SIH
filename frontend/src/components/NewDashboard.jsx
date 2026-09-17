@@ -17,6 +17,10 @@ import {
   Clock,
   Play,
   Pause,
+  LogOut,
+  UserCheck,
+  ShieldCheck,
+  Radio,
 } from "lucide-react";
 
 import CommandCenter from "./CommandCenter";
@@ -27,6 +31,7 @@ import SystemHardware from "./SystemHardware";
 import SimulationLab from "./SimulationLab";
 import SensorHealth from "./SensorHealth";
 import AnomalyHistory from "./AnomalyHistory";
+import MultiStationNetwork from "./MultiStationNetwork";
 
 import {
   fetchHealth,
@@ -35,6 +40,9 @@ import {
   fetchAnomalies,
   fetchSensorHealth,
   fetchStatistics,
+  fetchStations,
+  selectPrimaryStation,
+  triggerScenario,
   startSimulator,
   stopSimulator,
   injectAnomaly,
@@ -42,8 +50,8 @@ import {
   connectTelemetryWebSocket,
 } from "../services/api";
 
-export default function NewDashboard({ onNavigateToLegacy }) {
-  const [activeModule, setActiveModule] = useState("command_center"); // 8 modules
+export default function NewDashboard({ onNavigateToLegacy, onLogout, user }) {
+  const [activeModule, setActiveModule] = useState("command_center"); // 9 modules
   const [isConnected, setIsConnected] = useState(false);
   const [isSimulatorRunning, setIsSimulatorRunning] = useState(true);
   const [isRetraining, setIsRetraining] = useState(false);
@@ -57,6 +65,15 @@ export default function NewDashboard({ onNavigateToLegacy }) {
   const [anomalies, setAnomalies] = useState([]);
   const [sensorHealth, setSensorHealth] = useState(null);
   const [statistics, setStatistics] = useState(null);
+
+  // Multi-Station Mesonet State
+  const [stations, setStations] = useState([]);
+  const [activeScenario, setActiveScenario] = useState("SCENARIO_E_NOMINAL");
+  const [primaryStationId, setPrimaryStationId] = useState("AWS-01");
+  const [networkHealth, setNetworkHealth] = useState(100.0);
+  const [spatialTopology, setSpatialTopology] = useState([]);
+  const [stationDropdownOpen, setStationDropdownOpen] = useState(false);
+  const [isScenarioRunning, setIsScenarioRunning] = useState(false);
 
   const [activeAlert, setActiveAlert] = useState(null);
   const lastAnomalyTimeRef = useRef(null);
@@ -77,6 +94,12 @@ export default function NewDashboard({ onNavigateToLegacy }) {
     setCurrentTelemetry(data);
     setIsConnected(true);
     setErrorMsg(null);
+
+    if (data.stations) setStations(data.stations);
+    if (data.active_scenario) setActiveScenario(data.active_scenario);
+    if (data.spatial_topology) setSpatialTopology(data.spatial_topology);
+    if (data.network_health != null) setNetworkHealth(data.network_health);
+    if (data.station_id) setPrimaryStationId(data.station_id);
 
     setHistory((prev) => {
       const exists = prev.some((p) => p.timestamp === data.timestamp);
@@ -114,13 +137,14 @@ export default function NewDashboard({ onNavigateToLegacy }) {
 
   const loadInitialData = useCallback(async () => {
     try {
-      const [healthCheck, curr, hist, health, stats, anom] = await Promise.allSettled([
+      const [healthCheck, curr, hist, health, stats, anom, stList] = await Promise.allSettled([
         fetchHealth(),
         fetchCurrentTelemetry(),
         fetchHistory(60),
         fetchSensorHealth(),
         fetchStatistics(),
         fetchAnomalies(30),
+        fetchStations(),
       ]);
 
       if (curr.status === "fulfilled" && curr.value?.data) {
@@ -142,6 +166,13 @@ export default function NewDashboard({ onNavigateToLegacy }) {
 
       if (anom.status === "fulfilled" && anom.value?.anomalies) {
         setAnomalies(anom.value.anomalies);
+      }
+
+      if (stList.status === "fulfilled" && stList.value?.stations) {
+        setStations(stList.value.stations);
+        if (stList.value.primary_station_id) setPrimaryStationId(stList.value.primary_station_id);
+        if (stList.value.network_health != null) setNetworkHealth(stList.value.network_health);
+        if (stList.value.spatial_topology) setSpatialTopology(stList.value.spatial_topology);
       }
 
       setIsConnected(true);
@@ -234,15 +265,37 @@ export default function NewDashboard({ onNavigateToLegacy }) {
     }
   };
 
+  const handleSelectStation = async (stationId) => {
+    try {
+      setPrimaryStationId(stationId);
+      setStationDropdownOpen(false);
+      await selectPrimaryStation(stationId);
+    } catch (err) {
+      console.error("Failed to select primary station:", err);
+    }
+  };
+
+  const handleTriggerScenario = async (scenarioKey) => {
+    setIsScenarioRunning(true);
+    try {
+      await triggerScenario(scenarioKey);
+    } catch (err) {
+      console.error("Failed to trigger scenario:", err);
+    } finally {
+      setTimeout(() => setIsScenarioRunning(false), 1500);
+    }
+  };
+
   const modules = [
-    { id: "command_center", label: "Command Center", subtitle: "Executive Overview & System Matrix", icon: LayoutDashboard },
-    { id: "live_telemetry", label: "Live Telemetry", subtitle: "6-Channel High-Speed Ingestion", icon: Activity },
-    { id: "ai_analysis", label: "AI Anomaly Analysis", subtitle: "Isolation Forest + LSTM Sequence Autoencoder", icon: BrainCircuit },
-    { id: "sensor_health", label: "Sensor Health", subtitle: "Hardware Diagnostics & Predictive Maintenance", icon: HeartPulse },
-    { id: "weather_intelligence", label: "Weather Intelligence", subtitle: "Dew Point, Density & Barometric Trends", icon: CloudRain },
-    { id: "anomaly_history", label: "Anomaly History", subtitle: "Audit Records & Multi-Model Corroboration", icon: HistoryIcon },
-    { id: "system_hardware", label: "System & Hardware", subtitle: "UART Terminal, GPIO & Firmware Blueprint", icon: Cpu },
-    { id: "simulation_lab", label: "Simulation Lab", subtitle: "9 Fault Scenarios, Ad-Hoc & CSV Evaluator", icon: FlaskConical },
+    { id: "command_center", label: "Command Center", subtitle: "Master Situation Deck", icon: LayoutDashboard },
+    { id: "aws_network", label: "AWS Network / Fleet", subtitle: "Multi-Station Mesonet", badge: "MESONET", icon: Radio },
+    { id: "live_telemetry", label: "Live Telemetry", subtitle: "4-Channel Oscilloscope", badge: "LIVE", icon: Activity },
+    { id: "ai_analysis", label: "AI Anomaly Analysis", subtitle: "LSTM Temporal Neural Net...", badge: "LSTM", icon: BrainCircuit },
+    { id: "sensor_health", label: "Sensor Health", subtitle: "Transducer Fleet Matrix", icon: HeartPulse },
+    { id: "weather_intelligence", label: "Weather Intelligence", subtitle: "Synoptic Thermodynamics", icon: CloudRain },
+    { id: "anomaly_history", label: "Anomaly History", subtitle: "SQLite Event Archive", icon: HistoryIcon },
+    { id: "system_hardware", label: "System & Hardware", subtitle: "Topology & HW Bridge", icon: Cpu },
+    { id: "simulation_lab", label: "Simulation Lab", subtitle: "9 Calibrated Scenarios", badge: "TESTBED", icon: FlaskConical },
   ];
 
   const currentModuleObj = modules.find((m) => m.id === activeModule) || modules[0];
@@ -366,8 +419,8 @@ export default function NewDashboard({ onNavigateToLegacy }) {
 
         {/* Sidebar Nav: 8 Core Modules */}
         <nav style={{ flex: 1, padding: "12px 10px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px" }}>
-          <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", padding: "6px 8px 4px 8px", letterSpacing: "0.5px" }}>
-            Navigation Modules (8)
+          <div style={{ fontSize: "10px", fontWeight: "700", textTransform: "uppercase", color: "#64748b", padding: "6px 8px 4px 8px", letterSpacing: "0.8px" }}>
+            CONTROL MODULES
           </div>
 
           {modules.map((m) => {
@@ -384,7 +437,7 @@ export default function NewDashboard({ onNavigateToLegacy }) {
                   borderRight: "1px solid transparent",
                   borderBottom: "1px solid transparent",
                   borderRadius: "0 8px 8px 0",
-                  padding: "9px 12px",
+                  padding: "8px 10px",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
@@ -404,23 +457,53 @@ export default function NewDashboard({ onNavigateToLegacy }) {
                   }
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
                   <Icon
                     size={17}
                     color={isActive ? "#38bdf8" : "#94a3b8"}
                     style={{ flexShrink: 0 }}
                   />
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{
-                      fontSize: "13px",
+                      fontSize: "12.5px",
                       fontWeight: isActive ? "700" : "500",
-                      color: isActive ? "#ffffff" : "#cbd5e1"
+                      color: isActive ? "#ffffff" : "#cbd5e1",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                     }}>
                       {m.label}
                     </div>
+                    <div style={{
+                      fontSize: "10px",
+                      color: "#64748b",
+                      marginTop: "1px",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}>
+                      {m.subtitle}
+                    </div>
                   </div>
                 </div>
-                {isActive && <ChevronRight size={14} color="#38bdf8" />}
+
+                {m.badge ? (
+                  <span style={{
+                    background: m.badge === "LIVE" ? "rgba(56, 189, 248, 0.2)" : m.badge === "LSTM" ? "rgba(168, 85, 247, 0.2)" : "rgba(100, 116, 139, 0.2)",
+                    color: m.badge === "LIVE" ? "#38bdf8" : m.badge === "LSTM" ? "#c084fc" : "#94a3b8",
+                    border: `1px solid ${m.badge === "LIVE" ? "rgba(56, 189, 248, 0.4)" : m.badge === "LSTM" ? "rgba(168, 85, 247, 0.4)" : "rgba(100, 116, 139, 0.4)"}`,
+                    borderRadius: "4px",
+                    padding: "1px 5px",
+                    fontSize: "9px",
+                    fontWeight: "800",
+                    marginLeft: "6px",
+                    flexShrink: 0,
+                  }}>
+                    {m.badge}
+                  </span>
+                ) : (
+                  isActive && <ChevronRight size={13} color="#38bdf8" style={{ flexShrink: 0 }} />
+                )}
               </button>
             );
           })}
@@ -551,85 +634,304 @@ export default function NewDashboard({ onNavigateToLegacy }) {
         
         {/* Top Control Bar */}
         <header style={{
-          padding: "14px 24px",
-          background: "rgba(15, 23, 42, 0.8)",
+          padding: "10px 24px",
+          background: "rgba(10, 14, 23, 0.95)",
           backdropFilter: "blur(12px)",
           borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           flexWrap: "wrap",
-          gap: "14px",
+          gap: "12px",
           position: "sticky",
           top: 0,
           zIndex: 40,
         }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "11px", textTransform: "uppercase", color: "#38bdf8", fontWeight: "700", letterSpacing: "0.5px" }}>
-                SkyGuard Control Room
-              </span>
-              <span style={{ color: "#64748b" }}>/</span>
-              <span style={{ fontSize: "11px", color: "#94a3b8" }}>{currentModuleObj.label}</span>
-            </div>
-            <h1 style={{ fontSize: "19px", fontWeight: "800", color: "#f8fafc", margin: "2px 0 0 0" }}>
-              {currentModuleObj.label}
-            </h1>
+          {/* Left: Station Node Dropdown */}
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setStationDropdownOpen(!stationDropdownOpen)}
+              style={{
+                background: "rgba(15, 23, 42, 0.8)",
+                border: "1px solid rgba(51, 65, 85, 0.6)",
+                borderRadius: "8px",
+                padding: "6px 12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "12px",
+                fontFamily: "var(--font-mono, monospace)",
+                color: "#38bdf8",
+                cursor: "pointer",
+              }}
+            >
+              <Radio size={14} color="#38bdf8" />
+              <strong style={{ color: "#f8fafc" }}>
+                {primaryStationId} ({stations.find(s => s.station_id === primaryStationId)?.name || "AWS Node"})
+              </strong>
+              <span style={{ color: "#64748b", fontSize: "10px" }}>{stationDropdownOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {stationDropdownOpen && (
+              <div style={{
+                position: "absolute",
+                top: "100%",
+                left: 0,
+                marginTop: "6px",
+                width: "290px",
+                background: "#0f172a",
+                border: "1px solid rgba(56, 189, 248, 0.4)",
+                borderRadius: "8px",
+                boxShadow: "0 10px 25px rgba(0, 0, 0, 0.6)",
+                zIndex: 100,
+                overflow: "hidden",
+              }}>
+                <div style={{ padding: "8px 12px", background: "rgba(30, 41, 59, 0.8)", borderBottom: "1px solid rgba(51, 65, 85, 0.6)", fontSize: "11px", fontWeight: "700", color: "#94a3b8" }}>
+                  SELECT ACTIVE AWS MESONET NODE
+                </div>
+                <div style={{ maxHeight: "240px", overflowY: "auto" }}>
+                  {stations.map((st) => (
+                    <button
+                      key={st.station_id}
+                      onClick={() => handleSelectStation(st.station_id)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        background: st.station_id === primaryStationId ? "rgba(14, 165, 233, 0.15)" : "transparent",
+                        border: "none",
+                        borderBottom: "1px solid rgba(51, 65, 85, 0.3)",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        color: "#f8fafc",
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(30, 41, 59, 0.5)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = st.station_id === primaryStationId ? "rgba(14, 165, 233, 0.15)" : "transparent"}
+                    >
+                      <div>
+                        <div style={{ fontSize: "12px", fontWeight: "700", color: st.station_id === primaryStationId ? "#38bdf8" : "#f8fafc" }}>
+                          {st.station_id} - {st.name}
+                        </div>
+                        <div style={{ fontSize: "10px", color: "#64748b" }}>
+                          Trust: {((st.trust_score || 1) * 100).toFixed(0)}% | {st.local_status || "NORMAL"}
+                        </div>
+                      </div>
+                      <span style={{
+                        fontSize: "9px",
+                        fontWeight: "700",
+                        padding: "2px 6px",
+                        borderRadius: "4px",
+                        background: st.local_status === "ANOMALY" ? "rgba(239, 68, 68, 0.2)" : st.local_status === "OFFLINE" ? "rgba(100, 116, 139, 0.2)" : "rgba(16, 185, 129, 0.2)",
+                        color: st.local_status === "ANOMALY" ? "#f87171" : st.local_status === "OFFLINE" ? "#94a3b8" : "#34d399",
+                      }}>
+                        {st.local_status || "NORMAL"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Top Bar Stats & Telemetry Pill */}
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          {/* Center: Dual UTC & Local Clock */}
+          <div style={{
+            background: "rgba(15, 23, 42, 0.7)",
+            border: "1px solid rgba(51, 65, 85, 0.5)",
+            borderRadius: "6px",
+            padding: "5px 12px",
+            fontSize: "11px",
+            fontFamily: "var(--font-mono, monospace)",
+            color: "#94a3b8",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}>
+            <Clock size={12} color="#64748b" />
+            <span>UTC: <strong style={{ color: "#f8fafc" }}>{new Date().toUTCString().slice(17, 25)}</strong> UTC</span>
+            <span style={{ color: "#475569" }}>|</span>
+            <span>LOCAL: <strong style={{ color: "#38bdf8" }}>{new Date().toLocaleTimeString()}</strong></span>
+          </div>
+
+          {/* Right: Mode Switcher Pills & Health Status */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             
-            {/* Real-Time UTC Timestamp */}
+            {/* Mode Switcher Pills */}
+            <div style={{
+              display: "flex",
+              background: "rgba(15, 23, 42, 0.8)",
+              padding: "2px",
+              borderRadius: "6px",
+              border: "1px solid rgba(51, 65, 85, 0.6)",
+            }}>
+              <span style={{
+                background: "#0284c7",
+                color: "#ffffff",
+                padding: "3px 8px",
+                borderRadius: "4px",
+                fontSize: "10.5px",
+                fontWeight: "700",
+                fontFamily: "var(--font-mono, monospace)",
+              }}>
+                PHYSICAL HW
+              </span>
+              <span style={{
+                background: "transparent",
+                color: "#94a3b8",
+                padding: "3px 8px",
+                borderRadius: "4px",
+                fontSize: "10.5px",
+                fontWeight: "600",
+                fontFamily: "var(--font-mono, monospace)",
+              }}>
+                SIMULATION
+              </span>
+            </div>
+
+            {/* HW: Not Connected Badge */}
             <div style={{
               background: "rgba(15, 23, 42, 0.7)",
               border: "1px solid rgba(51, 65, 85, 0.5)",
               borderRadius: "6px",
-              padding: "5px 10px",
-              fontSize: "11px",
+              padding: "4px 8px",
+              fontSize: "10.5px",
               color: "#94a3b8",
-              fontFamily: "var(--font-mono)",
+              fontFamily: "var(--font-mono, monospace)",
               display: "flex",
               alignItems: "center",
-              gap: "6px"
+              gap: "6px",
             }}>
-              <Clock size={12} color="#64748b" />
-              <span>{timeStr || "UTC Syncing..."}</span>
+              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#64748b" }} />
+              <span>HW: NOT CONNECTED</span>
             </div>
 
-            {/* Model Architecture Indicator */}
+            {/* API: Online */}
             <div style={{
-              background: "rgba(14, 165, 233, 0.1)",
-              border: "1px solid rgba(14, 165, 233, 0.3)",
+              background: "rgba(16, 185, 129, 0.12)",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
               borderRadius: "6px",
-              padding: "5px 10px",
-              fontSize: "11px",
-              color: "#38bdf8",
-              fontWeight: "600",
+              padding: "4px 8px",
+              fontSize: "10.5px",
+              color: "#34d399",
+              fontWeight: "700",
+              fontFamily: "var(--font-mono, monospace)",
               display: "flex",
               alignItems: "center",
-              gap: "6px"
+              gap: "5px",
             }}>
-              <BrainCircuit size={13} />
-              <span>Isolation Forest + LSTM Parallel</span>
+              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 6px #10b981" }} />
+              <span>API: ONLINE</span>
             </div>
 
-            {/* Backend Connection Indicator */}
+            {/* ML: Online */}
             <div style={{
-              background: isConnected ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
-              border: isConnected ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.3)",
+              background: "rgba(16, 185, 129, 0.12)",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
               borderRadius: "6px",
-              padding: "5px 10px",
-              fontSize: "11px",
+              padding: "4px 8px",
+              fontSize: "10.5px",
+              color: "#34d399",
+              fontWeight: "700",
+              fontFamily: "var(--font-mono, monospace)",
               display: "flex",
               alignItems: "center",
-              gap: "6px"
+              gap: "5px",
             }}>
-              <div className={isConnected ? "live-indicator" : "live-indicator-danger"} style={{ width: "8px", height: "8px" }} />
-              <span style={{ color: isConnected ? "#34d399" : "#f87171", fontWeight: "700" }}>
-                {isConnected ? "FASTAPI LIVE" : "DISCONNECTED"}
-              </span>
+              <BrainCircuit size={11} color="#34d399" />
+              <span>ML: ONLINE</span>
             </div>
+
+            {/* DB: Online */}
+            <div style={{
+              background: "rgba(16, 185, 129, 0.12)",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              fontSize: "10.5px",
+              color: "#34d399",
+              fontWeight: "700",
+              fontFamily: "var(--font-mono, monospace)",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+            }}>
+              <span>DB: ONLINE</span>
+            </div>
+
+            {/* Legacy View Link */}
+            <button
+              onClick={onNavigateToLegacy}
+              style={{
+                background: "rgba(30, 41, 59, 0.6)",
+                border: "1px solid rgba(56, 189, 248, 0.4)",
+                borderRadius: "6px",
+                padding: "4px 8px",
+                color: "#38bdf8",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span>Legacy View</span>
+              <ExternalLink size={11} />
+            </button>
+
+            {/* Operator Profile Badge */}
+            <div style={{
+              background: "rgba(15, 23, 42, 0.8)",
+              border: "1px solid rgba(51, 65, 85, 0.7)",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              fontSize: "11px",
+              color: "#cbd5e1",
+              fontFamily: "var(--font-mono, monospace)",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}>
+              <UserCheck size={12} color="#38bdf8" />
+              <span>{user?.username || "admin"}</span>
+            </div>
+
+            {/* Logout Action */}
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                style={{
+                  background: "rgba(239, 68, 68, 0.12)",
+                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                  borderRadius: "6px",
+                  padding: "4px 8px",
+                  color: "#fca5a5",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  fontFamily: "var(--font-mono, monospace)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.25)";
+                  e.currentTarget.style.borderColor = "#f87171";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "rgba(239, 68, 68, 0.12)";
+                  e.currentTarget.style.borderColor = "rgba(239, 68, 68, 0.4)";
+                }}
+                title="Logout & Secure Station Access"
+              >
+                <LogOut size={12} />
+                <span>LOGOUT</span>
+              </button>
+            )}
+
 
           </div>
         </header>
@@ -704,10 +1006,29 @@ export default function NewDashboard({ onNavigateToLegacy }) {
               sensorHealth={sensorHealth}
               statistics={statistics}
               history={history}
+              stations={stations}
+              networkHealth={networkHealth}
+              spatialTopology={spatialTopology}
               onNavigateToAI={() => setActiveModule("ai_analysis")}
               onNavigateToTelemetry={() => setActiveModule("live_telemetry")}
               onNavigateToHealth={() => setActiveModule("sensor_health")}
               onNavigateToLab={() => setActiveModule("simulation_lab")}
+              onNavigateToNetwork={() => setActiveModule("aws_network")}
+              onTriggerScenario={handleTriggerScenario}
+              onSelectStation={handleSelectStation}
+              isScenarioRunning={isScenarioRunning}
+            />
+          )}
+
+          {activeModule === "aws_network" && (
+            <MultiStationNetwork
+              stations={stations}
+              primaryStationId={primaryStationId}
+              networkHealth={networkHealth}
+              spatialTopology={spatialTopology}
+              onSelectStation={handleSelectStation}
+              onTriggerScenario={handleTriggerScenario}
+              isScenarioRunning={isScenarioRunning}
             />
           )}
 
@@ -767,7 +1088,7 @@ export default function NewDashboard({ onNavigateToLegacy }) {
           }}>
             <div>Smart India Hackathon (SIH 26073) | Automatic Weather Station Intelligent AI/ML Anomaly Detection System</div>
             <div style={{ marginTop: "4px", color: "#475569" }}>
-              Dual Model Pipeline: Isolation Forest (150 Trees) + Vectorized LSTM Sequence Autoencoder + SHAP Analysis | Hardware Node: AWS-001 (AWS)
+              Dual Model Pipeline: Isolation Forest (150 Trees) + Vectorized LSTM Sequence Autoencoder + SHAP Analysis | Hardware Node: {primaryStationId} (AWS)
             </div>
           </footer>
 
@@ -791,7 +1112,7 @@ export default function NewDashboard({ onNavigateToLegacy }) {
           zIndex: 30,
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ color: "#38bdf8", fontWeight: "700" }}>⚡ AWS NODE: <strong>AWS-001</strong></span>
+            <span style={{ color: "#38bdf8", fontWeight: "700" }}>⚡ AWS NODE: <strong>{primaryStationId}</strong></span>
             <span style={{ color: "#475569" }}>|</span>
             <span style={{ color: "#fbbf24", fontWeight: "700" }}>
               STATUS: <strong>PHYSICAL HW DISCONNECTED (SIMULATION STREAM ACTIVE)</strong>

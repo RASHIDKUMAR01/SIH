@@ -22,6 +22,10 @@ from app.ml.anomaly_detector import IsolationForestAnomalyDetector
 from app.ml.lstm_detector import LSTMAnomalyDetector
 from app.ml.classifier import AnomalyClassifier, AnomalyClassificationResult, ClassifiedAnomalyType, AnomalySeverity
 from app.ml.explainability import AnomalyExplainer, AnomalyExplanation
+from app.ml.local_brain import LocalBrain, LocalBrainReport
+from app.ml.spatial_analyzer import SpatialCrossStationAnalyzer, SpatialAnalysisReport
+from app.ml.multivariate_consistency import MultivariateConsistencyEvaluator, MultivariateConsistencyReport
+from app.ml.global_brain import GlobalBrain, GlobalBrainDiagnosis
 from app.services.sensor_health import SensorHealthMonitor, SensorHealthReport
 
 
@@ -29,6 +33,10 @@ class AnomalyDetectionService:
     def __init__(self, model_path: Optional[str] = None):
         self.classifier = AnomalyClassifier()
         self.health_monitor = SensorHealthMonitor()
+        self.local_brain = LocalBrain(station_id="AWS-001")
+        self.spatial_analyzer = SpatialCrossStationAnalyzer(primary_station_id="AWS-001")
+        self.multivariate_evaluator = MultivariateConsistencyEvaluator()
+        self.global_brain = GlobalBrain()
         self.active_model_name: str = "ensemble" # "ensemble", "isolation_forest", "lstm"
         
         curr_dir = os.path.dirname(os.path.abspath(__file__))
@@ -91,7 +99,17 @@ class AnomalyDetectionService:
         humidity: Optional[float],
         wind_speed: Optional[float] = None,
         station_id: str = "AWS-TINKER-01",
+        neighbors: Optional[List[Dict[str, Any]]] = None,
+        is_simulated_event_regional: bool = False,
     ) -> Dict[str, Any]:
+        # 1. Local Brain: Station-Level Edge Diagnostic Check
+        local_report: LocalBrainReport = self.local_brain.evaluate(
+            temperature=temperature,
+            pressure=pressure,
+            humidity=humidity,
+            wind_speed=wind_speed,
+        )
+
         if self.detector.streaming_preprocessor is None:
             prep = self.detector.preprocessor if self.detector.preprocessor is not None else AWSPreprocessor()
             self.detector.streaming_preprocessor = StreamingPreprocessor(prep, max_window=60)
@@ -104,8 +122,11 @@ class AnomalyDetectionService:
         )
         
         row_dict = feat_df.iloc[0].to_dict()
+        t_diff = float(row_dict.get("temp_diff_1", 0.0))
+        p_diff = float(row_dict.get("press_diff_1", 0.0))
+        h_diff = float(row_dict.get("hum_diff_1", 0.0))
 
-        # 1. Isolation Forest Evaluation
+        # 2. Isolation Forest Evaluation (Supporting reference model)
         if self.detector.model is not None:
             raw_decision = float(self.detector.model.decision_function(X_curr)[0])
             is_if_anomaly = bool(raw_decision < self.detector.decision_threshold)
@@ -115,7 +136,7 @@ class AnomalyDetectionService:
             is_if_anomaly = False
             if_score = 0.0
 
-        # 2. LSTM Autoencoder Sequence Evaluation
+        # 3. LSTM Autoencoder Sequence Evaluation (Primary temporal model)
         self.sequence_buffer.append(X_curr[0])
         seq_len = self.lstm_detector.sequence_length
         if len(self.sequence_buffer) < seq_len:
@@ -127,44 +148,65 @@ class AnomalyDetectionService:
 
         lstm_loss, is_lstm_anomaly, lstm_score = self.lstm_detector.score_sequence(full_seq)
 
-        # 3. Model Selection / Fusion
-        if self.active_model_name == "lstm":
-            effective_score = lstm_score
-            effective_is_anomaly = is_lstm_anomaly
-        elif self.active_model_name == "isolation_forest":
-            effective_score = if_score
-            effective_is_anomaly = is_if_anomaly
-        else: # Ensemble (Both models collaborating)
-            effective_score = max(if_score, lstm_score)
-            effective_is_anomaly = is_if_anomaly or is_lstm_anomaly
-
-        # 4. Multi-Modal Rule & Physics Classifier
-        classif: AnomalyClassificationResult = self.classifier.classify(
-            row_or_dict=row_dict,
-            if_score=effective_score,
-            is_if_anomaly=effective_is_anomaly,
+        # 4. Spatial Cross-Station Verification
+        spatial_report: SpatialAnalysisReport = self.spatial_analyzer.analyze(
+            temperature=temperature,
+            pressure=pressure,
+            humidity=humidity,
+            wind_speed=wind_speed,
+            neighbors=neighbors,
+            is_simulated_event_regional=is_simulated_event_regional,
         )
 
-        is_anomaly = bool(classif.anomaly_type != ClassifiedAnomalyType.NORMAL)
-        final_anomaly_score = max(effective_score, classif.confidence if is_anomaly else 1.0 - classif.confidence)
+        # 5. Multivariate Thermodynamic Consistency
+        multivariate_report: MultivariateConsistencyReport = self.multivariate_evaluator.evaluate(
+            temperature=temperature,
+            pressure=pressure,
+            humidity=humidity,
+            wind_speed=wind_speed,
+            t_diff_1=t_diff,
+            p_diff_1=p_diff,
+            h_diff_1=h_diff,
+        )
 
-        # 5. Explainable AI Root Cause
+        # 6. Multi-Modal Rule & Physics Classifier
+        classif: AnomalyClassificationResult = self.classifier.classify(
+            row_or_dict=row_dict,
+            if_score=lstm_score,
+            is_if_anomaly=is_lstm_anomaly,
+        )
+
+        # 7. Global Brain Multi-Evidence Decision Fusion (Final Contextual Authority)
+        global_diagnosis: GlobalBrainDiagnosis = self.global_brain.evaluate(
+            local_report=local_report,
+            lstm_score=lstm_score,
+            is_lstm_anomaly=is_lstm_anomaly,
+            lstm_loss=lstm_loss,
+            spatial_report=spatial_report,
+            multivariate_report=multivariate_report,
+            if_score=if_score,
+            is_if_anomaly=is_if_anomaly,
+            raw_anomaly_type=classif.anomaly_type.value,
+            affected_parameters=classif.affected_parameters,
+        )
+
+        # Explainable AI Root Cause
         explanation: AnomalyExplanation = self.explainer.explain(
             telemetry=row_dict,
-            anomaly_type=classif.anomaly_type.value,
+            anomaly_type=global_diagnosis.specific_type,
             affected_parameters=classif.affected_parameters,
             scaled_feature_vector=X_curr,
         )
 
-        # 6. Sensor Health Assessment
+        # Sensor Health Assessment
         health_report: SensorHealthReport = self.health_monitor.update(
-            anomaly_type=classif.anomaly_type.value,
-            severity=classif.severity.value,
+            anomaly_type=global_diagnosis.specific_type,
+            severity=global_diagnosis.severity,
             affected_parameters=classif.affected_parameters,
-            confidence=classif.confidence,
+            confidence=global_diagnosis.confidence,
         )
 
-        # Compute realistic synoptic surface wind speed if not provided
+        # Realistic surface wind calculation if not provided
         if wind_speed is None:
             try:
                 hour = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00")).hour if "T" in str(timestamp) else 12
@@ -182,24 +224,12 @@ class AnomalyDetectionService:
         except Exception:
             ts_ms = int(time.time() * 1000) % 100000000
 
-        # 7. Dual-Model Synthesis & Agreement Engine
+        # Model synthesis & agreement reporting
         if_class = classif.anomaly_type.value if is_if_anomaly else "NORMAL"
-
         lstm_class = classif.anomaly_type.value if is_lstm_anomaly else "NORMAL"
         models_agree = (is_if_anomaly == is_lstm_anomaly)
         
-        if models_agree:
-            agreement_status = "MODEL AGREEMENT"
-            if not is_if_anomaly and not is_lstm_anomaly:
-                final_ai_interpretation = "NORMAL WEATHER STATE: Both Isolation Forest and LSTM Sequence Autoencoder confirm nominal atmospheric parameters within baseline envelope."
-            else:
-                final_ai_interpretation = f"CORROBORATED ANOMALY ({classif.anomaly_type.value}): Both Isolation Forest and LSTM Sequence Autoencoder detect significant divergence from nominal meteorological dynamics."
-        else:
-            agreement_status = "MODEL DISAGREEMENT"
-            if is_if_anomaly and not is_lstm_anomaly:
-                final_ai_interpretation = f"MODEL DISAGREEMENT: Isolation Forest flags multivariate outlier (score: {if_score:.3f}), but LSTM temporal autoencoder reconstructs trajectory within threshold. REQUIRES FURTHER ANALYSIS."
-            else:
-                final_ai_interpretation = f"MODEL DISAGREEMENT: LSTM Sequence Autoencoder detects temporal sequence divergence (Loss: {lstm_loss:.3f}), while static Isolation Forest falls within bounds. REQUIRES FURTHER ANALYSIS."
+        agreement_status = "MODEL AGREEMENT" if models_agree else "MODEL DISAGREEMENT"
 
         return {
             "timestamp": str(timestamp),
@@ -209,18 +239,27 @@ class AnomalyDetectionService:
             "pressure": pressure,
             "humidity": humidity,
             "wind_speed": round(float(wind_speed), 2),
-            "rainfall": round(float(12.5 if classif.anomaly_type.value == "HUMIDITY_ANOMALY" and (humidity or 0) > 90 else 0.0), 2),
+            "rainfall": round(float(12.5 if global_diagnosis.specific_type == "HUMIDITY_ANOMALY" and (humidity or 0) > 90 else 0.0), 2),
             "battery_voltage": round(float(4.12 + (0.04 * np.sin(ts_ms / 1000.0))), 2),
-            "is_anomaly": is_anomaly,
-
-            "anomaly_score": round(float(final_anomaly_score), 4),
-            "anomaly_type": classif.anomaly_type.value,
-            "confidence": round(float(classif.confidence), 4),
-            "severity": classif.severity.value,
-            "explanation": explanation.summary,
+            
+            # Global Brain Final Output
+            "is_anomaly": global_diagnosis.is_anomaly,
+            "anomaly_score": round(float(lstm_score if global_diagnosis.is_anomaly else 1.0 - global_diagnosis.confidence), 4),
+            "anomaly_type": global_diagnosis.specific_type,
+            "diagnosis_category": global_diagnosis.diagnosis_category,
+            "confidence": round(float(global_diagnosis.confidence), 4),
+            "severity": global_diagnosis.severity,
+            "explanation": global_diagnosis.explanation,
             "affected_parameters": classif.affected_parameters,
             "raw_decision": round(raw_decision, 5),
             "active_model": self.active_model_name,
+            
+            # Sub-Architecture Metadata
+            "local_brain": local_report.to_dict(),
+            "spatial_analysis": spatial_report.to_dict(),
+            "multivariate_consistency": multivariate_report.to_dict(),
+            "global_brain": global_diagnosis.to_dict(),
+
             "models": {
                 "isolation_forest": {
                     "name": "Isolation Forest (150 Trees)",
@@ -246,7 +285,10 @@ class AnomalyDetectionService:
                 "comparison": {
                     "agreement": models_agree,
                     "status": agreement_status,
-                    "final_interpretation": final_ai_interpretation,
+                    "final_interpretation": global_diagnosis.explanation,
+                    "global_diagnosis": global_diagnosis.diagnosis_category,
+                    "spatial_agreement_pct": spatial_report.spatial_agreement_pct,
+                    "multivariate_level": multivariate_report.consistency_level,
                 },
             },
             "explainability": explanation.to_dict(),
@@ -296,35 +338,72 @@ class AnomalyDetectionService:
                 if_score=eff_score,
                 is_if_anomaly=eff_is_anom,
             )
-            
-            is_anom = bool(classif.anomaly_type != ClassifiedAnomalyType.NORMAL)
-            score = max(eff_score, classif.confidence if is_anom else 1.0 - classif.confidence)
+            t_d = float(row_feats.get("temp_diff_1", 0.0))
+            p_d = float(row_feats.get("press_diff_1", 0.0))
+            h_d = float(row_feats.get("hum_diff_1", 0.0))
+
+            local_rep = self.local_brain.evaluate(
+                temperature=row_feats.get("temperature"),
+                pressure=row_feats.get("pressure"),
+                humidity=row_feats.get("humidity"),
+                wind_speed=row_feats.get("wind_speed"),
+            )
+            spatial_rep = self.spatial_analyzer.analyze(
+                temperature=row_feats.get("temperature"),
+                pressure=row_feats.get("pressure"),
+                humidity=row_feats.get("humidity"),
+                wind_speed=row_feats.get("wind_speed"),
+            )
+            multi_rep = self.multivariate_evaluator.evaluate(
+                temperature=row_feats.get("temperature"),
+                pressure=row_feats.get("pressure"),
+                humidity=row_feats.get("humidity"),
+                wind_speed=row_feats.get("wind_speed"),
+                t_diff_1=t_d,
+                p_diff_1=p_d,
+                h_diff_1=h_d,
+            )
+            global_diag = self.global_brain.evaluate(
+                local_report=local_rep,
+                lstm_score=lstm_s,
+                is_lstm_anomaly=is_lstm,
+                lstm_loss=float(lstm_row.get("lstm_reconstruction_loss", 0.0)),
+                spatial_report=spatial_rep,
+                multivariate_report=multi_rep,
+                if_score=if_s,
+                is_if_anomaly=is_if,
+                raw_anomaly_type=classif.anomaly_type.value,
+                affected_parameters=classif.affected_parameters,
+            )
             
             explanation = self.explainer.explain(
                 telemetry=row_feats,
-                anomaly_type=classif.anomaly_type.value,
+                anomaly_type=global_diag.specific_type,
                 affected_parameters=classif.affected_parameters,
                 scaled_feature_vector=None,
             )
             
             health = self.health_monitor.update(
-                anomaly_type=classif.anomaly_type.value,
-                severity=classif.severity.value,
+                anomaly_type=global_diag.specific_type,
+                severity=global_diag.severity,
                 affected_parameters=classif.affected_parameters,
-                confidence=classif.confidence,
+                confidence=global_diag.confidence,
             )
             
             classified_records.append({
-                "is_anomaly": is_anom,
-                "anomaly_score": round(score, 4),
-                "anomaly_type": classif.anomaly_type.value,
-                "confidence": round(classif.confidence, 4),
-                "severity": classif.severity.value,
-                "explanation": explanation.summary,
+                "is_anomaly": global_diag.is_anomaly,
+                "anomaly_score": round(lstm_s if global_diag.is_anomaly else 1.0 - global_diag.confidence, 4),
+                "anomaly_type": global_diag.specific_type,
+                "diagnosis_category": global_diag.diagnosis_category,
+                "confidence": round(global_diag.confidence, 4),
+                "severity": global_diag.severity,
+                "explanation": global_diag.explanation,
                 "affected_parameters": classif.affected_parameters,
                 "isolation_forest_score": round(if_s, 4),
                 "lstm_reconstruction_loss": lstm_row["lstm_reconstruction_loss"],
                 "lstm_score": lstm_s,
+                "spatial_agreement_pct": spatial_rep.spatial_agreement_pct,
+                "multivariate_level": multi_rep.consistency_level,
                 "temperature_health": health.temperature_health,
                 "pressure_health": health.pressure_health,
                 "humidity_health": health.humidity_health,
@@ -337,3 +416,4 @@ class AnomalyDetectionService:
         cols_to_drop = [c for c in meta_df.columns if c in df.columns]
         base_df = df.drop(columns=cols_to_drop, errors="ignore")
         return pd.concat([base_df.reset_index(drop=True), meta_df], axis=1)
+

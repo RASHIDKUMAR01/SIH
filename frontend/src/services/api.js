@@ -1,7 +1,15 @@
-/**
- * Frontend API & Real-Time WebSocket Service for SkyGuard AI.
- */
+import { getAuthToken } from "./auth";
+
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+
+function getAuthHeaders(extraHeaders = {}) {
+  const token = getAuthToken();
+  const headers = { ...extraHeaders };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
 
 function getWsBase() {
   if (typeof window !== "undefined") {
@@ -14,21 +22,26 @@ function getWsBase() {
   return "ws://127.0.0.1:8000/api/ws/telemetry";
 }
 
-
 export async function fetchHealth() {
-  const res = await fetch(`${API_BASE}/health`);
+  const res = await fetch(`${API_BASE}/health`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Health check failed");
   return res.json();
 }
 
 export async function fetchCurrentTelemetry() {
-  const res = await fetch(`${API_BASE}/current`);
+  const res = await fetch(`${API_BASE}/current`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Failed to fetch current telemetry");
   return res.json();
 }
 
 export async function fetchHistory(limit = 60) {
-  const res = await fetch(`${API_BASE}/history?limit=${limit}`);
+  const res = await fetch(`${API_BASE}/history?limit=${limit}`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Failed to fetch history");
   return res.json();
 }
@@ -37,19 +50,25 @@ export async function fetchAnomalies(limit = 30, severity = null, type = null) {
   let url = `${API_BASE}/anomalies?limit=${limit}`;
   if (severity && severity !== "ALL") url += `&severity=${severity}`;
   if (type && type !== "ALL") url += `&anomaly_type=${type}`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Failed to fetch anomalies");
   return res.json();
 }
 
 export async function fetchSensorHealth() {
-  const res = await fetch(`${API_BASE}/sensor-health`);
+  const res = await fetch(`${API_BASE}/sensor-health`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Failed to fetch sensor health");
   return res.json();
 }
 
 export async function fetchStatistics() {
-  const res = await fetch(`${API_BASE}/statistics`);
+  const res = await fetch(`${API_BASE}/statistics`, {
+    headers: getAuthHeaders(),
+  });
   if (!res.ok) throw new Error("Failed to fetch statistics");
   return res.json();
 }
@@ -57,7 +76,7 @@ export async function fetchStatistics() {
 export async function startSimulator(intervalSeconds = 1.0) {
   const res = await fetch(`${API_BASE}/simulator/start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ interval_seconds: intervalSeconds }),
   });
   if (!res.ok) throw new Error("Failed to start simulator");
@@ -67,6 +86,7 @@ export async function startSimulator(intervalSeconds = 1.0) {
 export async function stopSimulator() {
   const res = await fetch(`${API_BASE}/simulator/stop`, {
     method: "POST",
+    headers: getAuthHeaders(),
   });
   if (!res.ok) throw new Error("Failed to stop simulator");
   return res.json();
@@ -75,7 +95,7 @@ export async function stopSimulator() {
 export async function injectAnomaly(anomalyType, duration = 10, params = {}) {
   const res = await fetch(`${API_BASE}/simulator/inject`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       anomaly_type: anomalyType,
       duration: duration,
@@ -89,7 +109,7 @@ export async function injectAnomaly(anomalyType, duration = 10, params = {}) {
 export async function analyzeCustomReading(payload) {
   const res = await fetch(`${API_BASE}/analyze`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error("Failed to analyze reading");
@@ -102,6 +122,7 @@ export async function uploadCsvDataset(file, persist = true) {
 
   const res = await fetch(`${API_BASE}/data/upload?persist=${persist}`, {
     method: "POST",
+    headers: getAuthHeaders(),
     body: formData,
   });
   if (!res.ok) {
@@ -114,7 +135,7 @@ export async function uploadCsvDataset(file, persist = true) {
 export async function triggerModelRetrain(records = 5000, contamination = 0.05) {
   const res = await fetch(`${API_BASE}/train`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ records, contamination }),
   });
   if (!res.ok) throw new Error("Failed to trigger retrain");
@@ -195,4 +216,51 @@ export async function fetchModelStatus() {
   if (!res.ok) throw new Error("Failed to fetch model status");
   return res.json();
 }
+
+export async function fetchStations() {
+  const res = await fetch(`${API_BASE}/stations`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch AWS stations");
+  return res.json();
+}
+
+export async function fetchStationDetail(stationId) {
+  const res = await fetch(`${API_BASE}/station/${stationId}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to fetch station ${stationId} detail`);
+  return res.json();
+}
+
+export async function fetchSpatialMap() {
+  const res = await fetch(`${API_BASE}/stations/spatial-map`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch spatial map");
+  return res.json();
+}
+
+export async function selectPrimaryStation(stationId) {
+  const res = await fetch(`${API_BASE}/stations/select-primary?station_id=${stationId}`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`Failed to set primary station to ${stationId}`);
+  return res.json();
+}
+
+export async function triggerScenario(scenarioId, durationSteps = 25) {
+  const res = await fetch(`${API_BASE}/simulator/scenario`, {
+    method: "POST",
+    headers: getAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      scenario: scenarioId,
+      duration_steps: durationSteps,
+    }),
+  });
+  if (!res.ok) throw new Error(`Failed to trigger scenario ${scenarioId}`);
+  return res.json();
+}
+
 

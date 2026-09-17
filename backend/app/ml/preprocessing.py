@@ -1,4 +1,4 @@
-﻿"""
+"""
 AWS Telemetry Preprocessing and Feature Engineering Pipeline.
 Provides dual-mode functionality:
   1. Batch historical processing for dataset cleaning and ML model training.
@@ -128,12 +128,12 @@ class AWSPreprocessor:
         
         a = 17.27
         b = 237.7
-        hum_clamped = data["humidity"].clip(lower=0.1, upper=100.0)
-        temp_val = data["temperature"]
-        alpha = ((a * temp_val) / (b + temp_val)) + np.log(hum_clamped / 100.0)
+        hum_arr = np.clip(data["humidity"].to_numpy(dtype=float), 0.1, 100.0)
+        temp_arr = data["temperature"].to_numpy(dtype=float)
+        alpha = ((a * temp_arr) / (b + temp_arr)) + np.log(hum_arr / 100.0)
         t_dew = (b * alpha) / (a - alpha)
-        data["dew_point_depression"] = temp_val - t_dew
-        data["psychrometric_spread"] = (temp_val * (100.0 - data["humidity"])) / 100.0
+        data["dew_point_depression"] = temp_arr - t_dew
+        data["psychrometric_spread"] = (temp_arr * (100.0 - hum_arr)) / 100.0
         
         hours = data["timestamp"].dt.hour + (data["timestamp"].dt.minute / 60.0)
         data["hour_sin"] = np.sin(2.0 * np.pi * hours / 24.0)

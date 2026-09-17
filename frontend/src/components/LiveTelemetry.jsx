@@ -2,10 +2,6 @@ import React, { useState } from "react";
 import {
   Activity,
   RotateCcw,
-  Thermometer,
-  Gauge,
-  Droplets,
-  Wind,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -30,7 +26,7 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
   const rawData = (history || []).slice(clearedOffset);
   const slicedData = rawData.slice(-bufferScope);
 
-  // If buffer is still filling up, format data with exact sample indices #0, #1, #2...
+  // If buffer has fewer items than bufferScope, pad or show current slice
   const chartData = slicedData.map((d, idx) => ({
     ...d,
     sampleIdx: idx,
@@ -50,48 +46,33 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
     }
   };
 
-  // Oscilloscope Custom Tooltip with crosshair dot and caret indicator
-  const createOscilloscopeTooltip = (channelName, unit, color) => {
+  // Oscilloscope Custom Tooltip matching user screenshot
+  const createOscilloscopeTooltip = (channelKey, color) => {
     return ({ active, payload }) => {
       if (active && payload && payload.length) {
         const point = payload[0].payload;
         const val = payload[0].value;
         return (
           <div style={{
-            background: "rgba(10, 14, 23, 0.95)",
-            border: `1px solid ${color}`,
-            borderRadius: "6px",
-            padding: "6px 12px",
-            boxShadow: `0 0 15px rgba(0, 0, 0, 0.8), 0 0 8px ${color}40`,
+            background: "rgba(5, 8, 17, 0.95)",
+            border: "1px solid rgba(51, 65, 85, 0.8)",
+            borderRadius: "4px",
+            padding: "5px 10px",
+            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.8)",
             fontFamily: "var(--font-mono, monospace)",
             fontSize: "11px",
             color: "#f8fafc",
             pointerEvents: "none",
           }}>
-            <div style={{ color: "#94a3b8", fontWeight: "700", marginBottom: "2px" }}>
+            <div style={{ color: "#ffffff", fontWeight: "700", fontSize: "11px" }}>
               #{point.sampleIdx}
             </div>
-            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-              <span style={{ color: color, textTransform: "lowercase" }}>{channelName} :</span>
-              <strong style={{ color: "#f8fafc" }}>
-                {typeof val === "number" ? val.toFixed(2) : val} {unit}
+            <div style={{ display: "flex", gap: "6px", alignItems: "center", marginTop: "2px" }}>
+              <span style={{ color: color }}>{channelKey} :</span>
+              <strong style={{ color: "#ffffff" }}>
+                {typeof val === "number" ? val.toFixed(0) : val}
               </strong>
             </div>
-            {point.is_anomaly && (
-              <div style={{
-                color: "#f87171",
-                fontWeight: "700",
-                fontSize: "10px",
-                marginTop: "4px",
-                borderTop: "1px solid rgba(239, 68, 68, 0.3)",
-                paddingTop: "2px",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-              }}>
-                ▲ ANOMALY: {point.anomaly_type}
-              </div>
-            )}
           </div>
         );
       }
@@ -99,8 +80,8 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
     };
   };
 
-  // Customized dot rendering with caret marker for anomalies
-  const renderAnomalyDot = (color) => {
+  // Customized dot rendering with red caret marker for anomalies matching screenshot
+  const renderAnomalyDot = () => {
     return (props) => {
       const { cx, cy, payload } = props;
       if (payload.is_anomaly) {
@@ -109,22 +90,22 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
             <circle
               cx={cx}
               cy={cy}
-              r={5}
+              r={4}
               fill="#ffffff"
-              stroke="#ef4444"
-              strokeWidth={2.5}
+              stroke="#f43f5e"
+              strokeWidth={2}
             />
-            {/* Red caret marker above anomaly peaks */}
+            {/* Red caret marker ^ above anomaly peaks */}
             <text
               x={cx}
-              y={cy - 10}
+              y={cy - 8}
               textAnchor="middle"
-              fill="#ef4444"
-              fontSize="12"
+              fill="#f43f5e"
+              fontSize="14"
               fontWeight="bold"
-              fontFamily="sans-serif"
+              fontFamily="monospace"
             >
-              ▲
+              ^
             </text>
           </g>
         );
@@ -143,7 +124,7 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
         alignItems: "center",
         flexWrap: "wrap",
         gap: "12px",
-        padding: "4px 2px",
+        padding: "2px 0",
       }}>
         {/* Title */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -227,18 +208,19 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
         {/* ========================================================= */}
         {/* CHANNEL 1: TEMPERATURE (°C) */}
         {/* ========================================================= */}
-        <div className="glass-panel" style={{
+        <div style={{
           padding: "16px 18px",
-          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          background: "#050811",
           border: "1px solid rgba(51, 65, 85, 0.6)",
           borderRadius: "8px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4)",
         }}>
           {/* Channel Header Bar */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <span style={{
               fontSize: "12px",
               fontWeight: "800",
-              color: "#fb7185",
+              color: "#f43f5e",
               letterSpacing: "0.6px",
               textTransform: "uppercase",
               fontFamily: "var(--font-mono, monospace)",
@@ -256,36 +238,39 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
           </div>
 
           {/* Chart Canvas */}
-          <div style={{ width: "100%", height: "200px" }}>
+          <div style={{ width: "100%", height: "205px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.3)" />
                 <XAxis
                   dataKey="indexLabel"
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   tickLine={{ stroke: "#475569" }}
                   interval="preserveStartEnd"
+                  fontFamily="monospace"
                 />
                 <YAxis
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   domain={[20, 100]}
                   ticks={[20, 40, 60, 80, 100]}
                   tickLine={{ stroke: "#475569" }}
+                  fontFamily="monospace"
                 />
                 <Tooltip
-                  content={createOscilloscopeTooltip("temperature", "°C", "#fb7185")}
-                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                  content={createOscilloscopeTooltip("temperature", "#f43f5e")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.5)", strokeWidth: 1 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="temp_val"
-                  stroke="#fb7185"
+                  stroke="#f43f5e"
                   strokeWidth={2.2}
-                  dot={renderAnomalyDot("#fb7185")}
-                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#fb7185", strokeWidth: 2 }}
+                  dot={renderAnomalyDot()}
+                  activeDot={{ r: 4, fill: "#ffffff", stroke: "#f43f5e", strokeWidth: 2 }}
                   isAnimationActive={false}
+                  style={{ filter: "drop-shadow(0 0 4px rgba(244, 63, 94, 0.4))" }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -295,14 +280,15 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
         {/* ========================================================= */}
         {/* CHANNEL 2: BAROMETRIC PRESSURE (hPa) */}
         {/* ========================================================= */}
-        <div className="glass-panel" style={{
+        <div style={{
           padding: "16px 18px",
-          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          background: "#050811",
           border: "1px solid rgba(51, 65, 85, 0.6)",
           borderRadius: "8px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4)",
         }}>
           {/* Channel Header Bar */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <span style={{
               fontSize: "12px",
               fontWeight: "800",
@@ -324,36 +310,39 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
           </div>
 
           {/* Chart Canvas */}
-          <div style={{ width: "100%", height: "200px" }}>
+          <div style={{ width: "100%", height: "205px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 12, right: 12, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.3)" />
                 <XAxis
                   dataKey="indexLabel"
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   tickLine={{ stroke: "#475569" }}
                   interval="preserveStartEnd"
+                  fontFamily="monospace"
                 />
                 <YAxis
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   domain={[825, 1045]}
                   ticks={[825, 880, 935, 990, 1045]}
                   tickLine={{ stroke: "#475569" }}
+                  fontFamily="monospace"
                 />
                 <Tooltip
-                  content={createOscilloscopeTooltip("pressure", "hPa", "#38bdf8")}
-                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                  content={createOscilloscopeTooltip("pressure", "#38bdf8")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.5)", strokeWidth: 1 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="press_val"
                   stroke="#38bdf8"
                   strokeWidth={2.2}
-                  dot={renderAnomalyDot("#38bdf8")}
-                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#38bdf8", strokeWidth: 2 }}
+                  dot={renderAnomalyDot()}
+                  activeDot={{ r: 4, fill: "#ffffff", stroke: "#38bdf8", strokeWidth: 2 }}
                   isAnimationActive={false}
+                  style={{ filter: "drop-shadow(0 0 4px rgba(56, 189, 248, 0.4))" }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -363,18 +352,19 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
         {/* ========================================================= */}
         {/* CHANNEL 3: RELATIVE HUMIDITY (%) */}
         {/* ========================================================= */}
-        <div className="glass-panel" style={{
+        <div style={{
           padding: "16px 18px",
-          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          background: "#050811",
           border: "1px solid rgba(51, 65, 85, 0.6)",
           borderRadius: "8px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4)",
         }}>
           {/* Channel Header Bar */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <span style={{
               fontSize: "12px",
               fontWeight: "800",
-              color: "#34d399",
+              color: "#10b981",
               letterSpacing: "0.6px",
               textTransform: "uppercase",
               fontFamily: "var(--font-mono, monospace)",
@@ -392,36 +382,39 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
           </div>
 
           {/* Chart Canvas */}
-          <div style={{ width: "100%", height: "200px" }}>
+          <div style={{ width: "100%", height: "205px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.3)" />
                 <XAxis
                   dataKey="indexLabel"
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   tickLine={{ stroke: "#475569" }}
                   interval="preserveStartEnd"
+                  fontFamily="monospace"
                 />
                 <YAxis
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   domain={[0, 100]}
                   ticks={[0, 25, 50, 75, 100]}
                   tickLine={{ stroke: "#475569" }}
+                  fontFamily="monospace"
                 />
                 <Tooltip
-                  content={createOscilloscopeTooltip("humidity", "%", "#34d399")}
-                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                  content={createOscilloscopeTooltip("humidity", "#10b981")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.5)", strokeWidth: 1 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="hum_val"
-                  stroke="#34d399"
+                  stroke="#10b981"
                   strokeWidth={2.2}
-                  dot={renderAnomalyDot("#34d399")}
-                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#34d399", strokeWidth: 2 }}
+                  dot={renderAnomalyDot()}
+                  activeDot={{ r: 4, fill: "#ffffff", stroke: "#10b981", strokeWidth: 2 }}
                   isAnimationActive={false}
+                  style={{ filter: "drop-shadow(0 0 4px rgba(16, 185, 129, 0.4))" }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -431,14 +424,15 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
         {/* ========================================================= */}
         {/* CHANNEL 4: WIND SPEED (m/s) */}
         {/* ========================================================= */}
-        <div className="glass-panel" style={{
+        <div style={{
           padding: "16px 18px",
-          background: "linear-gradient(180deg, rgba(13, 17, 28, 0.95) 0%, rgba(9, 13, 22, 0.98) 100%)",
+          background: "#050811",
           border: "1px solid rgba(51, 65, 85, 0.6)",
           borderRadius: "8px",
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.4)",
         }}>
           {/* Channel Header Bar */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
             <span style={{
               fontSize: "12px",
               fontWeight: "800",
@@ -460,36 +454,39 @@ export default function LiveTelemetry({ currentTelemetry, history }) {
           </div>
 
           {/* Chart Canvas */}
-          <div style={{ width: "100%", height: "200px" }}>
+          <div style={{ width: "100%", height: "205px" }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 12, right: 12, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.35)" />
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.3)" />
                 <XAxis
                   dataKey="indexLabel"
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   tickLine={{ stroke: "#475569" }}
                   interval="preserveStartEnd"
+                  fontFamily="monospace"
                 />
                 <YAxis
-                  stroke="#64748b"
+                  stroke="#475569"
                   fontSize={10}
                   domain={[0, 60]}
                   ticks={[0, 15, 30, 45, 60]}
                   tickLine={{ stroke: "#475569" }}
+                  fontFamily="monospace"
                 />
                 <Tooltip
-                  content={createOscilloscopeTooltip("wind_speed", "m/s", "#fbbf24")}
-                  cursor={{ stroke: "rgba(255, 255, 255, 0.4)", strokeWidth: 1, strokeDasharray: "2 2" }}
+                  content={createOscilloscopeTooltip("wind_speed", "#fbbf24")}
+                  cursor={{ stroke: "rgba(255, 255, 255, 0.5)", strokeWidth: 1 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="wind_val"
                   stroke="#fbbf24"
                   strokeWidth={2.2}
-                  dot={renderAnomalyDot("#fbbf24")}
-                  activeDot={{ r: 5, fill: "#ffffff", stroke: "#fbbf24", strokeWidth: 2 }}
+                  dot={renderAnomalyDot()}
+                  activeDot={{ r: 4, fill: "#ffffff", stroke: "#fbbf24", strokeWidth: 2 }}
                   isAnimationActive={false}
+                  style={{ filter: "drop-shadow(0 0 4px rgba(251, 191, 36, 0.4))" }}
                 />
               </LineChart>
             </ResponsiveContainer>

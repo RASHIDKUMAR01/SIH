@@ -1,6 +1,8 @@
-import React, { useState, useEffect, Component } from "react";
+import React, { useState, useEffect, useCallback, Component } from "react";
 import NewDashboard from "./components/NewDashboard";
 import LegacyDashboard from "./components/LegacyDashboard";
+import LoginPage from "./components/LoginPage";
+import { getAuthToken, getAuthUser, verifySession, logoutUser } from "./services/auth";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -56,12 +58,12 @@ class ErrorBoundary extends Component {
                   fontWeight: "600",
                 }}
               >
-                Reload Dashboard
+                Reload Application
               </button>
               <button
                 onClick={() => {
                   this.setState({ hasError: false });
-                  window.location.pathname = "/legacy";
+                  window.location.pathname = "/login";
                 }}
                 style={{
                   background: "rgba(51, 65, 85, 0.8)",
@@ -72,7 +74,7 @@ class ErrorBoundary extends Component {
                   cursor: "pointer",
                 }}
               >
-                Open Original Dashboard
+                Return to Login
               </button>
             </div>
           </div>
@@ -84,28 +86,66 @@ class ErrorBoundary extends Component {
 }
 
 export default function App() {
-  const getInitialRoute = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(getAuthToken()));
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [currentUser, setCurrentUser] = useState(getAuthUser);
+  const [sessionExpiredMsg, setSessionExpiredMsg] = useState(null);
+  const [targetRedirect, setTargetRedirect] = useState(null);
+
+  const getCleanRoute = () => {
     if (typeof window !== "undefined") {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       if (path.includes("/legacy") || hash.includes("legacy")) {
         return "legacy";
       }
+      if (path.includes("/login") || hash.includes("login")) {
+        return "login";
+      }
     }
     return "new";
   };
 
-  const [route, setRoute] = useState(getInitialRoute);
+  const [route, setRoute] = useState(getCleanRoute);
 
+  // Initial Auth Verification
+  useEffect(() => {
+    let isMounted = true;
+    async function checkCurrentSession() {
+      const token = getAuthToken();
+      if (!token) {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setIsCheckingAuth(false);
+        }
+        return;
+      }
+
+      const res = await verifySession();
+      if (isMounted) {
+        if (res.valid) {
+          setIsAuthenticated(true);
+          setCurrentUser(res.user || getAuthUser());
+        } else {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setSessionExpiredMsg("SESSION EXPIRED — PLEASE LOGIN AGAIN");
+        }
+        setIsCheckingAuth(false);
+      }
+    }
+
+    checkCurrentSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Location / Route Listener
   useEffect(() => {
     const handleLocationChange = () => {
-      const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      if (path.includes("/legacy") || hash.includes("legacy")) {
-        setRoute("legacy");
-      } else {
-        setRoute("new");
-      }
+      const current = getCleanRoute();
+      setRoute(current);
     };
 
     window.addEventListener("popstate", handleLocationChange);
@@ -117,7 +157,41 @@ export default function App() {
     };
   }, []);
 
+  const handleLoginSuccess = (authData) => {
+    setIsAuthenticated(true);
+    setCurrentUser(authData?.user || { username: "admin", role: "ADMIN_OPERATOR" });
+    setSessionExpiredMsg(null);
+
+    // Redirect to requested protected route if available, or default to '/'
+    const dest = targetRedirect === "legacy" ? "/legacy" : "/";
+    try {
+      window.history.pushState({}, "", dest);
+    } catch {
+      window.location.hash = dest;
+    }
+    setRoute(targetRedirect === "legacy" ? "legacy" : "new");
+    setTargetRedirect(null);
+  };
+
+  const handleLogout = async () => {
+    await logoutUser();
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setSessionExpiredMsg(null);
+    try {
+      window.history.pushState({}, "", "/login");
+    } catch {
+      window.location.hash = "/login";
+    }
+    setRoute("login");
+  };
+
   const navigateToLegacy = () => {
+    if (!isAuthenticated) {
+      setTargetRedirect("legacy");
+      setRoute("login");
+      return;
+    }
     if (typeof window !== "undefined") {
       try {
         window.history.pushState({}, "", "/legacy");
@@ -130,6 +204,11 @@ export default function App() {
   };
 
   const navigateToNew = () => {
+    if (!isAuthenticated) {
+      setTargetRedirect("new");
+      setRoute("login");
+      return;
+    }
     if (typeof window !== "undefined") {
       try {
         window.history.pushState({}, "", "/");
@@ -141,12 +220,51 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // If still checking initial authentication status
+  if (isCheckingAuth) {
+    return (
+      <div style={{
+        minHeight: "100vh",
+        background: "#050811",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#38bdf8",
+        fontFamily: "monospace",
+        fontSize: "14px",
+      }}>
+        INITIALIZING SECURE SESSION...
+      </div>
+    );
+  }
+
+  // If unauthenticated: always show LoginPage
+  if (!isAuthenticated) {
+    return (
+      <ErrorBoundary>
+        <LoginPage
+          onLoginSuccess={handleLoginSuccess}
+          initialErrorMessage={sessionExpiredMsg}
+        />
+      </ErrorBoundary>
+    );
+  }
+
+  // If authenticated: render protected routes
   return (
     <ErrorBoundary>
       {route === "legacy" ? (
-        <LegacyDashboard onNavigateToNew={navigateToNew} />
+        <LegacyDashboard
+          onNavigateToNew={navigateToNew}
+          onLogout={handleLogout}
+          user={currentUser}
+        />
       ) : (
-        <NewDashboard onNavigateToLegacy={navigateToLegacy} />
+        <NewDashboard
+          onNavigateToLegacy={navigateToLegacy}
+          onLogout={handleLogout}
+          user={currentUser}
+        />
       )}
     </ErrorBoundary>
   );

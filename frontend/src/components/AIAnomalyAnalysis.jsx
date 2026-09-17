@@ -47,6 +47,16 @@ export default function AIAnomalyAnalysis({ currentTelemetry }) {
     anomaly_class: "NORMAL",
   };
 
+  const globalBrain = currentTelemetry?.global_brain || {};
+  const localBrain = currentTelemetry?.local_brain || {};
+  const spatialAnalysis = currentTelemetry?.spatial_analysis || {};
+  const multivariateConsistency = currentTelemetry?.multivariate_consistency || {};
+
+  const diagnosisCategory = globalBrain?.diagnosis_category || currentTelemetry?.diagnosis_category || (isAnomaly ? "SENSOR_FAULT" : "NORMAL");
+  const spatialAgreementPct = spatialAnalysis?.spatial_agreement_pct ?? comparison?.spatial_agreement_pct ?? 94.2;
+  const multiLevel = multivariateConsistency?.consistency_level ?? comparison?.multivariate_level ?? "HIGH";
+  const localBrainStatus = localBrain?.status || "NORMAL";
+
   const comparison = models.comparison || {
     agreement: ifModel.is_anomaly === lstmModel.is_anomaly,
     status: ifModel.is_anomaly === lstmModel.is_anomaly ? "MODEL AGREEMENT" : "MODEL DISAGREEMENT",
@@ -78,10 +88,10 @@ export default function AIAnomalyAnalysis({ currentTelemetry }) {
             </div>
             <div>
               <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#f8fafc", margin: 0 }}>
-                Dual-Model AI Anomaly Analysis Engine
+                Spatial-Temporal Global Brain & AI Anomaly Engine
               </h2>
               <p style={{ fontSize: "13px", color: "#94a3b8", margin: "3px 0 0 0" }}>
-                Parallel Inference Architecture: Isolation Forest (Tree-Based Outliers) + LSTM Sequence Autoencoder (Temporal Trajectories)
+                Multi-Evidence Verification: Local Brain Edge $\rightarrow$ LSTM Temporal Autoencoder $\rightarrow$ Spatial Mesonet $\rightarrow$ Multivariate Physics
               </p>
             </div>
           </div>
@@ -103,6 +113,66 @@ export default function AIAnomalyAnalysis({ currentTelemetry }) {
               <div style={{ fontSize: "14px", fontWeight: "800", color: isAgreement ? "#34d399" : "#fbbf24" }}>
                 {comparison.status}
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Global Brain Multi-Evidence Summary Metrics Strip */}
+        <div style={{
+          marginTop: "16px",
+          paddingTop: "14px",
+          borderTop: "1px solid rgba(51, 65, 85, 0.5)",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          gap: "12px",
+        }}>
+          {/* Local Brain Status */}
+          <div style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(51, 65, 85, 0.5)", borderRadius: "8px", padding: "8px 12px" }}>
+            <div style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", fontFamily: "var(--font-mono)" }}>
+              1. LOCAL BRAIN
+            </div>
+            <div style={{ fontSize: "13px", fontWeight: "800", color: localBrainStatus === "NORMAL" ? "#34d399" : "#f87171", marginTop: "2px", fontFamily: "var(--font-mono)" }}>
+              {localBrainStatus === "NORMAL" ? "● STATUS: NORMAL" : "▲ LOCAL ALERT"}
+            </div>
+          </div>
+
+          {/* LSTM Temporal Score */}
+          <div style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(51, 65, 85, 0.5)", borderRadius: "8px", padding: "8px 12px" }}>
+            <div style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", fontFamily: "var(--font-mono)" }}>
+              2. LSTM TEMPORAL SCORE
+            </div>
+            <div style={{ fontSize: "13px", fontWeight: "800", color: "#c084fc", marginTop: "2px", fontFamily: "var(--font-mono)" }}>
+              {lstmModel.score != null ? lstmModel.score.toFixed(4) : "0.0000"} <span style={{ fontSize: "10px", color: "#94a3b8" }}>(Loss: {lstmModel.reconstruction_loss != null ? lstmModel.reconstruction_loss.toFixed(3) : "0.000"})</span>
+            </div>
+          </div>
+
+          {/* Spatial Agreement % */}
+          <div style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(51, 65, 85, 0.5)", borderRadius: "8px", padding: "8px 12px" }}>
+            <div style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", fontFamily: "var(--font-mono)" }}>
+              3. SPATIAL AGREEMENT
+            </div>
+            <div style={{ fontSize: "13px", fontWeight: "800", color: spatialAgreementPct >= 65 ? "#38bdf8" : "#fbbf24", marginTop: "2px", fontFamily: "var(--font-mono)" }}>
+              {spatialAgreementPct.toFixed(1)}% <span style={{ fontSize: "10px", color: "#94a3b8" }}>({spatialAnalysis?.neighbor_count || 3} adjacent AWS)</span>
+            </div>
+          </div>
+
+          {/* Multivariate Consistency */}
+          <div style={{ background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(51, 65, 85, 0.5)", borderRadius: "8px", padding: "8px 12px" }}>
+            <div style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", fontFamily: "var(--font-mono)" }}>
+              4. MULTIVARIATE PHYSICS
+            </div>
+            <div style={{ fontSize: "13px", fontWeight: "800", color: multiLevel === "HIGH" ? "#34d399" : multiLevel === "MEDIUM" ? "#fbbf24" : "#f87171", marginTop: "2px", fontFamily: "var(--font-mono)" }}>
+              {multiLevel} CONSISTENCY
+            </div>
+          </div>
+
+          {/* Global Brain Diagnosis */}
+          <div style={{ background: "rgba(15, 23, 42, 0.8)", border: `1px solid ${diagnosisCategory === "GENUINE_WEATHER_EVENT" ? "rgba(56, 189, 248, 0.6)" : diagnosisCategory === "NORMAL" ? "rgba(16, 185, 129, 0.6)" : "rgba(239, 68, 68, 0.6)"}`, borderRadius: "8px", padding: "8px 12px" }}>
+            <div style={{ fontSize: "10px", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", fontFamily: "var(--font-mono)" }}>
+              ★ GLOBAL BRAIN DIAGNOSIS
+            </div>
+            <div style={{ fontSize: "12px", fontWeight: "900", color: diagnosisCategory === "GENUINE_WEATHER_EVENT" ? "#38bdf8" : diagnosisCategory === "NORMAL" ? "#34d399" : "#f87171", marginTop: "2px", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
+              {diagnosisCategory.replace(/_/g, " ")}
             </div>
           </div>
         </div>

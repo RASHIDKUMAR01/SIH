@@ -6,12 +6,19 @@ import SensorCards from "./SensorCards";
 import TelemetryCharts from "./TelemetryCharts";
 import AnomalyPanel from "./AnomalyPanel";
 import SensorHealth from "./SensorHealth";
+import MultiStationNetwork from "./MultiStationNetwork";
 
 export default function CommandCenter({
   currentTelemetry,
   sensorHealth,
   statistics,
   history,
+  stations = [],
+  activeScenario = "SCENARIO_E_NOMINAL",
+  primaryStationId = "AWS-01",
+  networkHealth = 100.0,
+  spatialTopology = [],
+  onSelectStation,
   onNavigateToAI,
   onNavigateToTelemetry,
   onNavigateToHealth,
@@ -100,7 +107,17 @@ export default function CommandCenter({
         </div>
       </div>
 
-      {/* 5. Sensor Health & Predictive Maintenance Summary */}
+      {/* 5. AWS Network / Multi-Station Monitoring Matrix */}
+      <MultiStationNetwork
+        stations={stations}
+        activeScenario={activeScenario}
+        primaryStationId={primaryStationId}
+        networkHealth={networkHealth}
+        spatialTopology={spatialTopology}
+        onSelectStation={onSelectStation}
+      />
+
+      {/* 6. Sensor Health & Predictive Maintenance Summary */}
       <SensorHealth sensorHealth={sensorHealth} />
 
     </div>

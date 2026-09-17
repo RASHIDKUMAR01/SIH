@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Activity, Radio, CloudRain, Cpu, RefreshCw, CheckCircle, AlertTriangle, LayoutDashboard } from "lucide-react";
+import { Activity, Radio, CloudRain, Cpu, RefreshCw, CheckCircle, AlertTriangle, LayoutDashboard, LogOut, UserCheck } from "lucide-react";
 
 export default function Header({
   isConnected,
@@ -9,6 +9,8 @@ export default function Header({
   isRetraining,
   activeView = "dashboard",
   onViewChange,
+  onLogout,
+  user,
 }) {
   const [timeStr, setTimeStr] = useState("");
 
@@ -165,6 +167,44 @@ export default function Header({
             <RefreshCw size={14} className={isRetraining ? "animate-spin" : ""} />
             {isRetraining ? "Retraining..." : "Retrain ML"}
           </button>
+
+          {/* Operator Profile Pill */}
+          <div style={{
+            background: "rgba(15, 23, 42, 0.8)",
+            border: "1px solid rgba(51, 65, 85, 0.7)",
+            borderRadius: "6px",
+            padding: "5px 10px",
+            fontSize: "11px",
+            color: "#cbd5e1",
+            fontFamily: "var(--font-mono, monospace)",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}>
+            <UserCheck size={13} color="#38bdf8" />
+            <span>{user?.username || "admin"}</span>
+          </div>
+
+          {/* Logout Button */}
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="btn-control btn-danger"
+              style={{
+                fontSize: "11px",
+                padding: "5px 10px",
+                fontWeight: "700",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+              title="Logout & Secure Station Access"
+            >
+              <LogOut size={13} />
+              <span>LOGOUT</span>
+            </button>
+          )}
 
         </div>
 

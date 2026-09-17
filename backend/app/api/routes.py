@@ -18,6 +18,19 @@ from app.api.schemas import (
     SimulatorInjectRequest,
     TrainRequest,
     HealthResponse,
+    LoginRequest,
+    LoginResponse,
+    VerifyTokenResponse,
+    UserProfile,
+    ScenarioTriggerRequest,
+    StationsListResponse,
+    StationItemSchema,
+)
+from app.auth import (
+    authenticate_user,
+    create_session_token,
+    verify_session_token,
+    get_current_user,
 )
 from app.database.session import get_db
 from app.database.crud import (
@@ -30,6 +43,7 @@ from app.database.crud import (
 )
 from app.services.streaming_worker import simulator_worker
 from app.services.anomaly_service import AnomalyDetectionService
+from app.simulator.mesonet_network import mesonet_manager
 
 router = APIRouter(prefix="/api", tags=["AWS Telemetry & Anomaly Detection"])
 
@@ -71,15 +85,95 @@ def get_system_health(db: Session = Depends(get_db)):
     )
 
 
-@router.get("/stations", summary="Get Connected AWS Telemetry Stations")
+@router.get("/stations", summary="Get Connected AWS Telemetry Stations Network")
 def get_stations():
+    net_state = mesonet_manager.step() if not simulator_worker.latest_reading else simulator_worker.latest_reading
+    stations_data = net_state.get("stations", [])
+    if not stations_data:
+        # Fallback to direct mesonet state if stream hasn't ticked yet
+        direct = mesonet_manager.step()
+        stations_data = direct.get("stations", [])
+
     return {
-        "stations": [
-            {"id": "AWS-SIH-001", "name": "Automatic Weather Station 001 (Primary)", "type": "SIMULATED", "status": "ONLINE"},
-            {"id": "AWS-TINKER-01", "name": "Physical Hardware / IoT Prototype", "type": "HARDWARE", "status": "ONLINE"}
-        ],
-        "active_station": "AWS-TINKER-01"
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "active_scenario": net_state.get("active_scenario", mesonet_manager.active_scenario),
+        "primary_station_id": mesonet_manager.primary_station_id,
+        "network_health": net_state.get("network_health", 100.0),
+        "total_stations": len(stations_data),
+        "online_stations": sum(1 for s in stations_data if s.get("is_reporting", True)),
+        "stations": stations_data,
+        "spatial_topology": net_state.get("spatial_topology", []),
     }
+
+
+@router.get("/stations/spatial-map", summary="Get AWS Network Nodes and Spatial Topology")
+def get_stations_spatial_map():
+    nodes = []
+    for sid, node in mesonet_manager.stations.items():
+        nodes.append({
+            "station_id": node.station_id,
+            "station_name": node.name,
+            "latitude": node.latitude,
+            "longitude": node.longitude,
+            "elevation_m": node.elevation_m,
+            "is_primary": (sid == mesonet_manager.primary_station_id),
+            "is_reporting": node.is_reporting,
+            "temperature": node.current_temp,
+            "trust_score": node.latest_report.trust_score if node.latest_report else 0.98,
+            "status": node.latest_report.status if node.latest_report else "NORMAL",
+        })
+    top = mesonet_manager.step().get("spatial_topology", [])
+    return {
+        "nodes": nodes,
+        "topology": top,
+        "spatial_topology": top,
+        "primary_station_id": mesonet_manager.primary_station_id,
+    }
+
+
+@router.post("/stations/select-primary", summary="Set Primary Monitored Station")
+def set_primary_station(station_id: str = Query(..., description="Target Station ID, e.g. AWS-01")):
+    if station_id not in mesonet_manager.stations:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' does not exist.")
+    simulator_worker.set_primary_station(station_id)
+    return {"status": "primary_station_updated", "primary_station_id": station_id}
+
+
+@router.get("/station/{station_id}", summary="Get Detailed Telemetry for Specific AWS Station")
+@router.get("/stations/{station_id}", summary="Get Detailed Telemetry for Specific AWS Station (Plural)")
+def get_station_detail(station_id: str):
+    if station_id not in mesonet_manager.stations:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found in AWS network registry.")
+    
+    node = mesonet_manager.stations[station_id]
+    latest = node.latest_report
+    return {
+        "station_id": node.station_id,
+        "station_name": node.name,
+        "latitude": node.latitude,
+        "longitude": node.longitude,
+        "elevation_m": node.elevation_m,
+        "temperature": node.current_temp,
+        "pressure": node.current_press,
+        "humidity": node.current_hum,
+        "wind_speed": node.current_wind_speed,
+        "wind_direction": node.current_wind_dir,
+        "rainfall": node.current_rainfall,
+        "solar_radiation": node.current_solar,
+        "battery_voltage": node.current_battery,
+        "is_reporting": node.is_reporting,
+        "local_brain": latest.to_dict() if latest else None,
+    }
+
+
+@router.post("/simulator/scenario", summary="Trigger Multi-Station Demonstration Scenario")
+def trigger_simulator_scenario(payload: ScenarioTriggerRequest):
+    result = simulator_worker.trigger_scenario(
+        scenario_id=payload.target_scenario,
+        duration=payload.duration_steps or 25,
+    )
+    result["active_scenario"] = result.get("scenario", payload.target_scenario)
+    return result
 
 
 @router.api_route("/hardware/ports", methods=["GET", "HEAD"], summary="Get Available Hardware Serial Ports")
@@ -474,5 +568,62 @@ def predict_lstm_sequence(payload: Dict[str, Any]):
         "active_model": "lstm_autoencoder",
         "data": reading,
     }
+
+
+# =====================================================================
+# AUTHENTICATION & SECURE CONTROL-ROOM ACCESS ENDPOINTS
+# =====================================================================
+
+@router.post("/auth/login", response_model=LoginResponse, summary="Authenticate Operator Credentials")
+def operator_login(payload: LoginRequest):
+    user_info = authenticate_user(payload.username, payload.password)
+    if not user_info:
+        raise HTTPException(
+            status_code=401,
+            detail="INVALID CREDENTIALS",
+        )
+    
+    # 7 days if remember_me, else 24 hours
+    expires_seconds = 7 * 86400 if payload.remember_me else 86400
+    token = create_session_token(user_info, expires_delta_seconds=expires_seconds)
+    expires_dt = datetime.fromtimestamp(
+        datetime.now(timezone.utc).timestamp() + expires_seconds,
+        tz=timezone.utc
+    ).isoformat()
+    
+    return LoginResponse(
+        success=True,
+        message="Authentication successful. Control room session established.",
+        token=token,
+        expires_at=expires_dt,
+        user=UserProfile(
+            username=user_info["username"],
+            role=user_info["role"],
+            station_id=user_info["station_id"],
+            full_name=user_info.get("full_name", "SkyGuard Lead Operator"),
+        )
+    )
+
+
+@router.get("/auth/verify", response_model=VerifyTokenResponse, summary="Verify Active Session Token")
+def verify_operator_session(current_user: Dict[str, Any] = Depends(get_current_user)):
+    return VerifyTokenResponse(
+        valid=True,
+        user=UserProfile(
+            username=current_user.get("username", "admin"),
+            role=current_user.get("role", "ADMIN_OPERATOR"),
+            station_id=current_user.get("station_id", "AWS-001"),
+            full_name=current_user.get("full_name", "SkyGuard Lead Operator"),
+        )
+    )
+
+
+@router.post("/auth/logout", summary="Terminate Active Operator Session")
+def operator_logout():
+    return {
+        "success": True,
+        "message": "Session successfully terminated.",
+    }
+
 
 
